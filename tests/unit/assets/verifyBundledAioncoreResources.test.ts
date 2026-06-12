@@ -26,7 +26,7 @@ describe('verifyBundledAioncoreResources', () => {
     mkdirSync(nodeRoot, { recursive: true });
     writeFileSync(join(nodeRoot, 'node.exe'), '', { flush: true });
 
-    codexRoot = join(managedResourcesDir, 'acp', 'codex-acp', '0.14.0', 'win32-x64');
+    codexRoot = join(managedResourcesDir, 'acp', 'codex-acp', '0.15.0', 'win32-x64');
     mkdirSync(codexRoot, { recursive: true });
     writeFileSync(join(codexRoot, 'manifest.json'), JSON.stringify({ entrypoint: 'codex-acp.exe', path_entries: [] }), {
       flush: true,
@@ -84,7 +84,7 @@ describe('verifyBundledAioncoreResources', () => {
       flush: true,
     });
 
-    const darwinCodexRoot = join(darwinManagedResourcesDir, 'acp', 'codex-acp', '0.14.0', 'darwin-arm64');
+    const darwinCodexRoot = join(darwinManagedResourcesDir, 'acp', 'codex-acp', '0.15.0', 'darwin-arm64');
     mkdirSync(darwinCodexRoot, { recursive: true });
     writeFileSync(join(darwinCodexRoot, 'manifest.json'), JSON.stringify({ entrypoint: 'codex-acp' }), {
       flush: true,
@@ -150,7 +150,7 @@ describe('verifyBundledAioncoreResources', () => {
     });
 
     expect(result.missing).toContain(
-      'bundled-aioncore/win32-x64/managed-resources/acp/codex-acp/0.14.0/win32-x64/codex-acp.exe'
+      'bundled-aioncore/win32-x64/managed-resources/acp/codex-acp/0.15.0/win32-x64/codex-acp.exe'
     );
   });
 });

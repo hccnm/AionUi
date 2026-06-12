@@ -18,7 +18,7 @@ Environment variables:
   MANAGED_ACP_WRITE_ROOT_MANIFEST
                                Optional. true/false. Default: false
   MANAGED_ACP_NPM_VERSION      Optional. Exact npm version expected in PATH.
-  CODEX_ACP_VERSION            Optional. Default: 0.14.0
+  CODEX_ACP_VERSION            Optional. Default: 0.15.0
   CLAUDE_ACP_VERSION           Optional. Default: 0.39.0
 EOF
 }
@@ -59,7 +59,7 @@ MANAGED_ACP_TARGETS="${MANAGED_ACP_TARGETS:-darwin-arm64,darwin-x64,linux-x64,li
 MANAGED_ACP_OVERWRITE="${MANAGED_ACP_OVERWRITE:-false}"
 MANAGED_ACP_WRITE_ROOT_MANIFEST="${MANAGED_ACP_WRITE_ROOT_MANIFEST:-false}"
 MANAGED_ACP_NPM_VERSION="${MANAGED_ACP_NPM_VERSION:-}"
-CODEX_ACP_VERSION="${CODEX_ACP_VERSION:-0.14.0}"
+CODEX_ACP_VERSION="${CODEX_ACP_VERSION:-0.15.0}"
 CLAUDE_ACP_VERSION="${CLAUDE_ACP_VERSION:-0.39.0}"
 
 sanitize_version() {

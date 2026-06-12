@@ -7,11 +7,13 @@
 import { ipcBridge } from '@/common';
 import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import type { CreateAssistantRequest } from '@/common/types/agent/assistantTypes';
+import type { Assistant } from '@/common/types/agent/assistantTypes';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { getAssistantsDir, type ProcessConfig as ProcessConfigType } from './initStorage';
 
 const BUILTIN_ID_PREFIX = 'builtin-';
+const AI_PRODUCT_MANAGER_ASSISTANT_ID = 'ai-product-manager';
 
 /**
  * Legacy filename pattern for custom assistant rule files written by the
@@ -63,27 +65,7 @@ function normalisePresetAgentType(raw: unknown): string {
  * case; this whitelist is the guard for unprefixed ids.
  */
 const PRESET_ID_WHITELIST = new Set<string>([
-  'word-creator',
-  'word-form-creator',
-  'ppt-creator',
-  'excel-creator',
-  'morph-ppt',
-  'morph-ppt-3d',
-  'pitch-deck-creator',
-  'dashboard-creator',
-  'academic-paper',
-  'financial-model-creator',
-  'star-office-helper',
-  'openclaw-setup',
-  'cowork',
-  'game-3d',
-  'ui-ux-pro-max',
-  'planning-with-files',
-  'human-3-coach',
-  'social-job-publisher',
-  'moltbook',
-  'beautiful-mermaid',
-  'story-roleplay',
+  AI_PRODUCT_MANAGER_ASSISTANT_ID,
 ]);
 
 function isLegacyBuiltin(a: Record<string, unknown>): boolean {
@@ -177,6 +159,7 @@ type BuiltinAgentTypeOverride = { id: string; preset_agent_type: string };
  * legacy `assistants` field (kept on purpose so the user can downgrade).
  */
 const ASSISTANTS_MIGRATION_FLAG = 'migration.assistantsMigrated_v1';
+const AI_PM_DUPLICATE_CLEANUP_FLAG = 'migration.aiProductManagerDuplicateCleaned_v1';
 
 type LegacyConfigAccessor = {
   get: (key: string) => Promise<unknown>;
@@ -196,6 +179,84 @@ async function markAssistantsMigrationDone(configFile: ConfigFile): Promise<void
   } catch (err) {
     console.warn('[AionUi] failed to persist assistants migration flag', err);
   }
+}
+
+async function getMigrationFlag(configFile: ConfigFile, key: string): Promise<boolean> {
+  const accessor = configFile as unknown as LegacyConfigAccessor;
+  try {
+    return Boolean(await accessor.get(key));
+  } catch {
+    return false;
+  }
+}
+
+async function setMigrationFlag(configFile: ConfigFile, key: string): Promise<void> {
+  const accessor = configFile as unknown as LegacyConfigAccessor;
+  if (typeof accessor.set !== 'function') return;
+  try {
+    await accessor.set(key, true);
+  } catch (err) {
+    console.warn(`[AionUi] failed to persist migration flag '${key}'`, err);
+  }
+}
+
+function isLegacyAiProductManagerDuplicate(assistant: Assistant): boolean {
+  if (assistant.source !== 'user') return false;
+  if (assistant.id === AI_PRODUCT_MANAGER_ASSISTANT_ID) return true;
+
+  const names = [assistant.name, ...Object.values(assistant.name_i18n ?? {})];
+  const hasAiPmName = names.some((name) => name === 'AI 产品经理' || name === 'AI Product Manager');
+  if (!hasAiPmName) return false;
+
+  const descriptions = [assistant.description ?? '', ...Object.values(assistant.description_i18n ?? {})];
+  return descriptions.some(
+    (description) =>
+      description.includes('PM Skills-native') ||
+      description.includes('phuryn/pm-skills') ||
+      description.includes('Decision Packet')
+  );
+}
+
+async function cleanupAiProductManagerDuplicate(configFile: ConfigFile): Promise<boolean> {
+  if (await getMigrationFlag(configFile, AI_PM_DUPLICATE_CLEANUP_FLAG)) {
+    return true;
+  }
+
+  let list: Assistant[];
+  try {
+    list = await ipcBridge.assistants.list.invoke();
+  } catch (error) {
+    console.error('[AionUi] Failed to list assistants for AI PM duplicate cleanup:', error);
+    return false;
+  }
+
+  const hasBuiltinAiPm = list.some((assistant) => assistant.source === 'builtin' && assistant.id === AI_PRODUCT_MANAGER_ASSISTANT_ID);
+  if (!hasBuiltinAiPm) {
+    await setMigrationFlag(configFile, AI_PM_DUPLICATE_CLEANUP_FLAG);
+    return true;
+  }
+
+  const duplicates = list.filter(isLegacyAiProductManagerDuplicate);
+  if (duplicates.length === 0) {
+    await setMigrationFlag(configFile, AI_PM_DUPLICATE_CLEANUP_FLAG);
+    return true;
+  }
+
+  const results = await Promise.allSettled(
+    duplicates.map((assistant) => ipcBridge.assistants.delete.invoke({ id: assistant.id }))
+  );
+  let failed = 0;
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      failed += 1;
+      console.error(`[AionUi] Failed to delete duplicate AI PM assistant '${duplicates[index].id}':`, result.reason);
+    }
+  });
+  if (failed > 0) return false;
+
+  console.log(`[AionUi] Deleted ${duplicates.length} duplicate custom AI PM assistant(s)`);
+  await setMigrationFlag(configFile, AI_PM_DUPLICATE_CLEANUP_FLAG);
+  return true;
 }
 
 /**
@@ -515,6 +576,7 @@ export async function migrateAssistantsToBackend(configFile: ConfigFile): Promis
   }
 
   const rawConfigFile = configFile as unknown as LegacyConfigAccessor;
+  const aiPmDuplicateCleanupOk = await cleanupAiProductManagerDuplicate(configFile);
 
   // Idempotency guard (ELECTRON-1KT): once the flag is set, never replay
   // legacy assistants. Phase 1 is "insert-only", which means a user-deleted
@@ -526,7 +588,7 @@ export async function migrateAssistantsToBackend(configFile: ConfigFile): Promis
     // Treat read errors as "not migrated yet"; we'll set on success.
   }
   if (alreadyMigrated) {
-    return true;
+    return aiPmDuplicateCleanupOk;
   }
 
   const legacyValue = await rawConfigFile.get('assistants').catch(() => [] as unknown);
@@ -609,5 +671,5 @@ export async function migrateAssistantsToBackend(configFile: ConfigFile): Promis
   // All four phases succeeded — set the completion flag so subsequent launches
   // short-circuit and we don't re-import assistants the user deletes later.
   await markAssistantsMigrationDone(configFile);
-  return true;
+  return aiPmDuplicateCleanupOk;
 }

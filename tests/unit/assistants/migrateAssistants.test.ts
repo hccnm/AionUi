@@ -18,6 +18,7 @@ vi.mock('@/common', () => ({
       setState: { invoke: vi.fn() },
       update: { invoke: vi.fn() },
       list: { invoke: vi.fn(async () => []) },
+      delete: { invoke: vi.fn() },
     },
     fs: {
       writeAssistantRule: { invoke: vi.fn(async () => true) },
@@ -74,7 +75,7 @@ describe('migrateAssistants', () => {
     });
 
     it('renames colliding preset ids to avoid overwrite', () => {
-      const legacy = { id: 'word-creator', name: 'User Word' }; // 'word-creator' is in PRESET_ID_WHITELIST
+      const legacy = { id: 'ai-product-manager', name: 'User Word' }; // whitelisted built-in id
       const result = legacyAssistantToCreateRequest(legacy);
       expect(result.id).toMatch(/^custom-migrated-/);
       expect(result.name).toBe('User Word');
@@ -428,6 +429,7 @@ describe('migrateAssistants', () => {
       const config = makeConfigWithSet({
         assistants: [{ id: 'custom-1', name: 'Custom 1' }],
         'migration.assistantsMigrated_v1': true,
+        'migration.aiProductManagerDuplicateCleaned_v1': true,
       });
 
       const result = await migrateAssistantsToBackend(config as any);
@@ -438,6 +440,60 @@ describe('migrateAssistants', () => {
       expect(ipcBridge.assistants.list.invoke).not.toHaveBeenCalled();
       expect(ipcBridge.assistants.setState.invoke).not.toHaveBeenCalled();
       expect(ipcBridge.assistants.update.invoke).not.toHaveBeenCalled();
+    });
+
+    it('cleans duplicate custom AI PM assistant even after legacy migration completed', async () => {
+      const config = makeConfigWithSet({
+        assistants: [{ id: 'custom-ai-pm', name: 'AI 产品经理' }],
+        'migration.assistantsMigrated_v1': true,
+      });
+      (ipcBridge.assistants.list.invoke as any).mockResolvedValue([
+        {
+          id: 'ai-product-manager',
+          source: 'builtin',
+          name: 'AI 产品经理',
+          name_i18n: {},
+          description: 'system',
+          description_i18n: {},
+          enabled: true,
+          sort_order: -10000,
+          preset_agent_type: 'aionrs',
+          enabled_skills: [],
+          custom_skill_names: [],
+          disabled_builtin_skills: [],
+          context_i18n: {},
+          prompts: [],
+          prompts_i18n: {},
+          models: [],
+        },
+        {
+          id: 'custom-ai-pm',
+          source: 'user',
+          name: 'AI 产品经理',
+          name_i18n: {},
+          description:
+            'PM Skills-native 产品决策工作台：基于 phuryn/pm-skills，把混乱上下文变成可审查、可辩护、可执行的 Decision Packet。',
+          description_i18n: {},
+          enabled: true,
+          sort_order: 0,
+          preset_agent_type: 'aionrs',
+          enabled_skills: [],
+          custom_skill_names: [],
+          disabled_builtin_skills: [],
+          context_i18n: {},
+          prompts: [],
+          prompts_i18n: {},
+          models: [],
+        },
+      ]);
+
+      const result = await migrateAssistantsToBackend(config as any);
+
+      expect(result).toBe(true);
+      expect(ipcBridge.assistants.delete.invoke).toHaveBeenCalledTimes(1);
+      expect(ipcBridge.assistants.delete.invoke).toHaveBeenCalledWith({ id: 'custom-ai-pm' });
+      expect(config.store.get('migration.aiProductManagerDuplicateCleaned_v1')).toBe(true);
+      expect(ipcBridge.assistants.import.invoke).not.toHaveBeenCalled();
     });
 
     it('does not re-import an assistant deleted by the user after migration', async () => {
