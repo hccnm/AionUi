@@ -219,6 +219,29 @@ export const conversation = {
     (p) => `/api/conversations/${p.conversation_id}/side-question`,
     (p) => ({ question: p.question })
   ),
+  stopWorkflow: httpPost<
+    { result: unknown },
+    { conversation_id: string; task_id: string; run_id?: string; workflow_name?: string }
+  >(
+    (p) => `/api/conversations/${p.conversation_id}/acp-ext`,
+    (p) => ({
+      method: 'claude/workflows/stop',
+      params: {
+        taskId: p.task_id,
+        ...(p.run_id ? { runId: p.run_id } : {}),
+        ...(p.workflow_name ? { workflowName: p.workflow_name } : {}),
+      },
+    }),
+    { timeoutMs: 5000 }
+  ),
+  listWorkflows: httpPost<{ result: unknown }, { conversation_id: string }>(
+    (p) => `/api/conversations/${p.conversation_id}/acp-ext`,
+    () => ({
+      method: 'claude/workflows/list',
+      params: {},
+    }),
+    { timeoutMs: 2500, silentStatuses: [404, 504] }
+  ),
   confirmMessage: httpPost<void, IConfirmMessageParams>(
     (p) => `/api/conversations/${p.conversation_id}/confirmations/${encodeURIComponent(p.call_id)}/confirm`,
     (p) => ({ msg_id: p.msg_id, data: p.confirm_key })
@@ -523,7 +546,8 @@ export const fs = {
   readFile: httpPost<string | null, { path: string; workspace?: string }>('/api/fs/read'),
   readFileBuffer: httpPost<string | null, { path: string; workspace?: string }>('/api/fs/read-buffer'),
   createTempFile: httpPost<string, { file_name: string }>('/api/fs/temp'),
-  writeFile: httpPost<boolean, { path: string; data: string }>('/api/fs/write'),
+  writeFile: httpPost<boolean, { path: string; data: string; workspace?: string }>('/api/fs/write'),
+  createDirectory: httpPost<boolean, { path: string; workspace?: string }>('/api/fs/mkdir'),
   createZip: httpPost<
     boolean,
     {

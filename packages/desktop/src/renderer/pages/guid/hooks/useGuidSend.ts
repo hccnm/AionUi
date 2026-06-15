@@ -116,6 +116,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     t,
   } = deps;
   const sendingRef = useRef(false);
+  const hasSelectedAgent = Boolean(selectedAgentInfo);
 
   const handleSend = useCallback(async () => {
     const isCustomWorkspace = !!dir;
@@ -315,7 +316,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   ]);
 
   const sendMessageHandler = useCallback(() => {
-    if (loading || sendingRef.current) return;
+    if (loading || sendingRef.current || !hasSelectedAgent) return;
     sendingRef.current = true;
     setLoading(true);
     handleSend()
@@ -338,6 +339,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       });
   }, [
     loading,
+    hasSelectedAgent,
     handleSend,
     setLoading,
     setInput,
@@ -351,7 +353,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   ]);
 
   // Calculate button disabled state
-  const isButtonDisabled = loading || !input.trim();
+  const isButtonDisabled = loading || !input.trim() || !hasSelectedAgent;
 
   return {
     handleSend,

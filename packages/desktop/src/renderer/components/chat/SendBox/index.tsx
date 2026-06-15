@@ -170,6 +170,7 @@ const SendBox: React.FC<{
   lockMultiLine?: boolean;
   sendButtonPrefix?: React.ReactNode;
   slash_commands?: SlashCommandItem[];
+  extraBuiltinSlashCommands?: SlashCommandItem[];
   onSlashBuiltinCommand?: (name: string) => void;
   hasPendingAttachments?: boolean;
   enableBtw?: boolean;
@@ -202,6 +203,7 @@ const SendBox: React.FC<{
   lockMultiLine = false,
   sendButtonPrefix,
   slash_commands = [],
+  extraBuiltinSlashCommands = [],
   onSlashBuiltinCommand,
   hasPendingAttachments = false,
   enableBtw = false,
@@ -457,8 +459,9 @@ const SendBox: React.FC<{
       // The `name === 'export'` branch below and the conversationExport hook are
       // kept intact for a future per-platform re-enable.
     }
+    commands.push(...extraBuiltinSlashCommands);
     return commands;
-  }, [conversationContext?.conversation_id, enableBtw, onSlashBuiltinCommand, t]);
+  }, [conversationContext?.conversation_id, enableBtw, extraBuiltinSlashCommands, onSlashBuiltinCommand, t]);
 
   const mergedSlashCommands = useMemo(() => {
     const map = new Map<string, SlashCommandItem>();

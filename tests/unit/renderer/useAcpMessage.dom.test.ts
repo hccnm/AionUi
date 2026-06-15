@@ -218,4 +218,35 @@ describe('useAcpMessage', () => {
       ]);
     });
   });
+
+  it('tracks current ACP mode from acp_mode_info stream updates', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+
+    act(() => {
+      responseStreamHandlerRef.current?.({
+        type: 'acp_mode_info',
+        data: {
+          current_mode_id: 'plan',
+          available_modes: [
+            { id: 'default', name: 'Default' },
+            { id: 'plan', name: 'Plan' },
+          ],
+        },
+        msg_id: 'mode-1',
+        conversation_id: 'conv-1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.modeInfo).toEqual({
+        current_mode_id: 'plan',
+        available_modes: [
+          { id: 'default', name: 'Default' },
+          { id: 'plan', name: 'Plan' },
+        ],
+      });
+    });
+  });
 });

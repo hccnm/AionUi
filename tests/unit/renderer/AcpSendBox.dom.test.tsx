@@ -11,13 +11,23 @@ import { BackendHttpError } from '@/common/adapter/httpBridge';
 import AcpSendBox from '@/renderer/pages/conversation/platforms/acp/AcpSendBox';
 import type { UseAcpMessageReturn } from '@/renderer/pages/conversation/platforms/acp/useAcpMessage';
 
-const { sendMessageInvokeMock, addOrUpdateMessageMock, resetStateMock, emitterEmitMock, setSendBoxHandlerMock } =
+const {
+  sendMessageInvokeMock,
+  addOrUpdateMessageMock,
+  resetStateMock,
+  emitterEmitMock,
+  setSendBoxHandlerMock,
+  sendBoxPropsMock,
+  agentModeSelectorPropsMock,
+} =
   vi.hoisted(() => ({
     sendMessageInvokeMock: vi.fn(),
     addOrUpdateMessageMock: vi.fn(),
     resetStateMock: vi.fn(),
     emitterEmitMock: vi.fn(),
     setSendBoxHandlerMock: vi.fn(),
+    sendBoxPropsMock: vi.fn(),
+    agentModeSelectorPropsMock: vi.fn(),
   }));
 
 vi.mock('@/common', () => ({
@@ -36,19 +46,30 @@ vi.mock('@/common', () => ({
 }));
 
 vi.mock('@/renderer/components/chat/SendBox', () => ({
-  default: ({ onSend }: { onSend: (message: string) => Promise<void> }) => (
-    <button
-      type='button'
-      onClick={() => {
-        void onSend('Hello').catch(() => {});
-      }}
-    >
-      send
-    </button>
-  ),
+  default: (props: { onSend: (message: string) => Promise<void>; rightTools?: React.ReactNode }) => {
+    sendBoxPropsMock(props);
+    return (
+      <>
+        {props.rightTools}
+        <button
+          type='button'
+          onClick={() => {
+            void props.onSend('Hello').catch(() => {});
+          }}
+        >
+          send
+        </button>
+      </>
+    );
+  },
 }));
 
-vi.mock('@/renderer/components/agent/AgentModeSelector', () => ({ default: () => null }));
+vi.mock('@/renderer/components/agent/AgentModeSelector', () => ({
+  default: (props: unknown) => {
+    agentModeSelectorPropsMock(props);
+    return null;
+  },
+}));
 vi.mock('@/renderer/components/chat/CommandQueuePanel', () => ({ default: () => null }));
 vi.mock('@/renderer/components/chat/MobileActionSheet', () => ({
   default: () => null,
@@ -180,11 +201,68 @@ const makeMessageState = (): UseAcpMessageReturn => ({
   hasThinkingMessage: false,
   slashCommands: [],
   fetchSlashCommands: vi.fn(),
+  modeInfo: null,
 });
 
 describe('AcpSendBox', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('passes builtin /plan slash command to SendBox for Claude conversations only', () => {
+    const { rerender } = render(
+      <AcpSendBox conversation_id='conv-1' backend='claude' workspacePath='/tmp/ws' messageState={makeMessageState()} />
+    );
+
+    expect(sendBoxPropsMock).toHaveBeenCalled();
+    let latestProps = sendBoxPropsMock.mock.calls.at(-1)?.[0];
+    expect(latestProps?.extraBuiltinSlashCommands).toEqual([
+      {
+        name: 'plan',
+        description: 'Plan',
+        kind: 'builtin',
+        source: 'builtin',
+        selectionBehavior: 'insert',
+      },
+    ]);
+
+    rerender(
+      <AcpSendBox conversation_id='conv-1' backend='opencode' workspacePath='/tmp/ws' messageState={makeMessageState()} />
+    );
+
+    latestProps = sendBoxPropsMock.mock.calls.at(-1)?.[0];
+    expect(latestProps?.extraBuiltinSlashCommands).toEqual([]);
+  });
+
+  it('passes live ACP mode info to AgentModeSelector', () => {
+    render(
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='claude'
+        session_mode='default'
+        workspacePath='/tmp/ws'
+        messageState={{
+          ...makeMessageState(),
+          modeInfo: {
+            current_mode_id: 'plan',
+            available_modes: [
+              { id: 'default', name: 'Default' },
+              { id: 'plan', name: 'Plan' },
+            ],
+          },
+        }}
+      />
+    );
+
+    const latestProps = agentModeSelectorPropsMock.mock.calls.at(-1)?.[0] as {
+      initialMode?: string;
+      dynamicModes?: Array<{ value: string; label: string }>;
+    };
+    expect(latestProps.initialMode).toBe('plan');
+    expect(latestProps.dynamicModes).toEqual([
+      { value: 'default', label: 'Default' },
+      { value: 'plan', label: 'Plan' },
+    ]);
   });
 
   it('resets ACP loading state when sendMessage fails before any stream error arrives', async () => {

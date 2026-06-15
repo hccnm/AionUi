@@ -86,6 +86,7 @@ const requiredAgentTipCodes = [
   'ACP_EMPTY_TURN_MAX_TOKENS',
   'ACP_EMPTY_TURN_MAX_TURN_REQUESTS',
   'ACP_EMPTY_TURN_REFUSAL',
+  'ACP_MODE_SWITCHED_PLAN',
 ] as const;
 
 const buildTips = (

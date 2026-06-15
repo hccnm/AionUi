@@ -2,8 +2,11 @@
  * Resolve the aioncore binary path.
  *
  * Search order:
- *  1. Bundled with app (production)
- *  2. System PATH
+ *  1. AIONUI_BACKEND_BINARY override
+ *  2. AIONUI_BACKEND_BUNDLED_DIR override
+ *  3. Bundled with app (production)
+ *  4. Repository resources (development)
+ *  5. System PATH
  */
 
 import { existsSync, readdirSync } from 'node:fs';
@@ -15,6 +18,14 @@ const MAX_DIR_ENTRIES = 20;
 const MAX_LOOKUP_TEXT_LENGTH = 1000;
 
 type BackendBinaryResolveDiagnostics = {
+  overrideBinaryPath?: string;
+  overrideBinaryExists?: boolean;
+  overrideBundledDir?: string;
+  overrideBundledDirExists?: boolean;
+  overrideRuntimeDirExists?: boolean;
+  checkedDevBundledPath?: string;
+  devBundledDirExists?: boolean;
+  devRuntimeDirExists?: boolean;
   resourcesPath?: string;
   runtimeKey: string;
   binaryName: string;
@@ -73,8 +84,17 @@ export function resolveBinaryPath(): string {
     pathLookupCommand: process.platform === 'win32' ? `where ${BINARY_NAME}` : `which ${BINARY_NAME}`,
   };
 
+  const overriddenBinary = resolveFromBinaryOverride(diagnostics);
+  if (overriddenBinary) return overriddenBinary;
+
+  const overriddenBundled = bundledPathFromOverride(runtimeKey, binaryName, diagnostics);
+  if (overriddenBundled) return overriddenBundled;
+
   const bundled = bundledPath(runtimeKey, binaryName, diagnostics);
   if (bundled) return bundled;
+
+  const devBundled = devBundledPath(runtimeKey, binaryName, diagnostics);
+  if (devBundled) return devBundled;
 
   const fromPath = resolveFromSystemPATH(diagnostics);
   if (fromPath) return fromPath;
@@ -83,6 +103,18 @@ export function resolveBinaryPath(): string {
     `Cannot find "${BINARY_NAME}" binary. Checked bundled location and system PATH.`,
     diagnostics
   );
+}
+
+function resolveFromBinaryOverride(diagnostics: BackendBinaryResolveDiagnostics): string | null {
+  const overrideBinaryPath = process.env.AIONUI_BACKEND_BINARY;
+  if (!overrideBinaryPath) return null;
+
+  diagnostics.overrideBinaryPath = overrideBinaryPath;
+  diagnostics.overrideBinaryExists = existsSync(overrideBinaryPath);
+  if (diagnostics.overrideBinaryExists) {
+    return overrideBinaryPath;
+  }
+  return null;
 }
 
 /**
@@ -106,6 +138,40 @@ function bundledPath(
   diagnostics.runtimeDirExists = existsSync(runtimeDir);
   diagnostics.resourcesDirEntries = listDirEntries(resourcesPath);
   diagnostics.runtimeDirEntries = listDirEntries(runtimeDir);
+
+  if (existsSync(candidate)) return candidate;
+  return null;
+}
+
+function bundledPathFromOverride(
+  runtimeKey: string,
+  binaryName: string,
+  diagnostics: BackendBinaryResolveDiagnostics
+): string | null {
+  const overrideBundledDir = process.env.AIONUI_BACKEND_BUNDLED_DIR;
+  if (!overrideBundledDir) return null;
+
+  const runtimeDir = join(overrideBundledDir, runtimeKey);
+  const candidate = join(runtimeDir, binaryName);
+  diagnostics.overrideBundledDir = overrideBundledDir;
+  diagnostics.overrideBundledDirExists = existsSync(overrideBundledDir);
+  diagnostics.overrideRuntimeDirExists = existsSync(runtimeDir);
+
+  if (existsSync(candidate)) return candidate;
+  return null;
+}
+
+function devBundledPath(
+  runtimeKey: string,
+  binaryName: string,
+  diagnostics: BackendBinaryResolveDiagnostics
+): string | null {
+  const bundledDir = join(process.cwd(), 'resources', 'bundled-aioncore');
+  const runtimeDir = join(bundledDir, runtimeKey);
+  const candidate = join(runtimeDir, binaryName);
+  diagnostics.checkedDevBundledPath = candidate;
+  diagnostics.devBundledDirExists = existsSync(bundledDir);
+  diagnostics.devRuntimeDirExists = existsSync(runtimeDir);
 
   if (existsSync(candidate)) return candidate;
   return null;

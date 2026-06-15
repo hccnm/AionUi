@@ -6,11 +6,30 @@
 
 import type { IMessageAcpPermission } from '@/common/chat/chatLib';
 import { conversation } from '@/common/adapter/ipcBridge';
-import { Button, Card, Radio, Typography } from '@arco-design/web-react';
-import React, { useState } from 'react';
+import { Button, Card, Message, Radio, Typography } from '@arco-design/web-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
+
+const isViewScriptOption = (
+  selectedOptionId: string | null,
+  options: NonNullable<IMessageAcpPermission['content']>['options']
+): boolean => {
+  if (!selectedOptionId) return false;
+  if (selectedOptionId === 'view_script') return true;
+
+  const selectedOption = options?.find((option) => option.option_id === selectedOptionId);
+  return selectedOption?.name?.toLowerCase().includes('raw script') ?? false;
+};
+
+const permissionErrorMessage = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('receiver dropped') || message.includes('oneshot canceled')) {
+    return '权限请求已过期，请重新触发 workflow';
+  }
+  return message || '权限响应失败';
+};
 
 interface MessageAcpPermissionProps {
   message: IMessageAcpPermission;
@@ -49,10 +68,28 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
   const [selected, setSelected] = useState<string | null>(null);
   const [isResponding, setIsResponding] = useState(false);
   const [hasResponded, setHasResponded] = useState(false);
+  const permissionRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        toolCallId: tool_call?.tool_call_id,
+        title: tool_call?.title,
+        command: tool_call?.raw_input?.command,
+        description: tool_call?.raw_input?.description,
+        options: options?.map((option) => option.option_id),
+      }),
+    [options, tool_call]
+  );
+
+  useEffect(() => {
+    setSelected(null);
+    setIsResponding(false);
+    setHasResponded(false);
+  }, [permissionRequestKey]);
 
   const handleConfirm = async () => {
     if (hasResponded || !selected) return;
 
+    const shouldKeepApprovalOpen = isViewScriptOption(selected, options);
     setIsResponding(true);
     try {
       const invokeData = {
@@ -63,10 +100,14 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
       };
 
       await conversation.confirmMessage.invoke(invokeData);
-      setHasResponded(true);
+      if (shouldKeepApprovalOpen) {
+        setSelected(null);
+      } else {
+        setHasResponded(true);
+      }
     } catch (error) {
-      // Handle error case - could add error logging here
       console.error('Error confirming permission:', error);
+      Message.error(permissionErrorMessage(error));
     } finally {
       setIsResponding(false);
     }

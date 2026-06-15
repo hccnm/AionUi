@@ -99,7 +99,7 @@ const AcpSendBox: React.FC<{
   workspacePath?: string;
   messageState: UseAcpMessageReturn;
 }> = ({ conversation_id, backend, session_mode, agent_name, workspacePath, messageState }) => {
-  const { aiProcessing, setAiProcessing, resetState, hasThinkingMessage, slashCommands, fetchSlashCommands } =
+  const { aiProcessing, setAiProcessing, resetState, hasThinkingMessage, slashCommands, fetchSlashCommands, modeInfo } =
     messageState;
   const { t } = useTranslation();
   const teamPermission = useTeamPermission();
@@ -121,6 +121,7 @@ const AcpSendBox: React.FC<{
     }));
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [currentMode, setCurrentMode] = useState<string | undefined>(session_mode);
+  const liveMode = modeInfo?.current_mode_id;
   const prepareRuntimeSync = useCallback(async () => {
     if (teamPermission) {
       await teamPermission.warmupSession();
@@ -141,7 +142,37 @@ const AcpSendBox: React.FC<{
     onSelectModelSuccess: () => Message.success(t('agent.model.switchSuccess')),
     onSelectModelFailed: () => Message.error(t('agent.model.switchFailed')),
   });
-  const availableAgentModes = useAgentModesForBackend(backend);
+  const staticAgentModes = useAgentModesForBackend(backend);
+  const liveAgentModes = useMemo(
+    () =>
+      (modeInfo?.available_modes ?? []).map((mode) => ({
+        value: mode.id,
+        label: mode.name ?? mode.id,
+      })),
+    [modeInfo?.available_modes]
+  );
+  const availableAgentModes = liveAgentModes.length > 0 ? liveAgentModes : staticAgentModes;
+  const extraBuiltinSlashCommands = useMemo(
+    () =>
+      backend === 'claude'
+        ? [
+            {
+              name: 'plan',
+              description: t('agentMode.plan', { defaultValue: 'Plan' }),
+              kind: 'builtin' as const,
+              source: 'builtin' as const,
+              selectionBehavior: 'insert' as const,
+            },
+          ]
+        : [],
+    [backend, t]
+  );
+
+  useEffect(() => {
+    if (liveMode) {
+      setCurrentMode(liveMode);
+    }
+  }, [liveMode]);
 
   // Mirror AgentModeSelector's getMode sync so the sheet shows the live mode label.
   useEffect(() => {
@@ -423,7 +454,7 @@ Please check your local CLI tool authentication status`,
     const modeOptions: MobileActionSheetOption[] = availableAgentModes.map((mode) => ({
       key: mode.value,
       label: t(`agentMode.${mode.value}`, { defaultValue: mode.label }),
-      description: mode.description,
+      description: 'description' in mode && typeof mode.description === 'string' ? mode.description : undefined,
       active: currentMode === mode.value,
     }));
 
@@ -574,7 +605,7 @@ Please check your local CLI tool authentication status`,
   };
 
   return (
-    <div className='max-w-800px w-full mx-auto flex flex-col mt-auto mb-16px'>
+    <div className='w-full flex flex-col mb-16px'>
       <CommandQueuePanel
         items={queuedCommands}
         paused={isQueuePaused}
@@ -626,7 +657,8 @@ Please check your local CLI tool authentication status`,
               backend={backend}
               conversation_id={conversation_id}
               compact
-              initialMode={session_mode}
+              initialMode={liveMode ?? session_mode}
+              dynamicModes={liveAgentModes}
               compactLeadingIcon={<Shield theme='outline' size='14' fill={iconColors.secondary} />}
               modeLabelFormatter={(mode) => t(`agentMode.${mode.value}`, { defaultValue: mode.label })}
               compactLabelPrefix={t('agentMode.permission')}
@@ -677,6 +709,7 @@ Please check your local CLI tool authentication status`,
         }
         onSend={onSendHandler}
         slash_commands={slashCommands}
+        extraBuiltinSlashCommands={extraBuiltinSlashCommands}
         onSlashBuiltinCommand={onSlashBuiltinCommand}
         allowSendWhileLoading
         compactActions={false}

@@ -286,7 +286,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
 
     for (let i = 0, len = list.length; i < len; i++) {
       const message = list[i];
-      // Skip hidden and available_commands messages
+      // Skip hidden/control messages.
       if (message.hidden) continue;
       if (message.type === 'available_commands') continue;
       if (message.type === 'tool_group') {

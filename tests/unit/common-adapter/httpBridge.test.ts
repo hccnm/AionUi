@@ -34,6 +34,7 @@ describe('httpBridge', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -395,6 +396,31 @@ describe('httpBridge', () => {
         headers: {},
         body: undefined,
       });
+    });
+
+    it('aborts fetch when timeoutMs elapses', async () => {
+      vi.useFakeTimers();
+      const fetchSpy = vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      });
+      vi.stubGlobal('fetch', fetchSpy);
+      vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+      const request = httpRequest('GET', '/api/slow', undefined, { timeoutMs: 1000 });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const signal = fetchSpy.mock.calls[0][1]?.signal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(false);
+
+      const assertion = expect(request).rejects.toThrow('Request timed out after 1000ms: GET /api/slow');
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await assertion;
+      expect(signal?.aborted).toBe(true);
     });
 
     it('sends JSON body for POST with content-type', async () => {

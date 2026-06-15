@@ -64,7 +64,8 @@ type TMessageType =
   | 'acp_tool_call'
   | 'plan'
   | 'thinking'
-  | 'available_commands';
+  | 'available_commands'
+  | 'workflow_update';
 
 interface IMessage<T extends TMessageType, Content extends Record<string, any>> {
   /**
@@ -359,6 +360,73 @@ export type IMessageAvailableCommands = IMessage<
   }
 >;
 
+export type WorkflowRunStatus = 'not_started' | 'running' | 'completed' | 'failed' | 'stopped' | string;
+
+export type WorkflowPhase = {
+  title: string;
+  detail?: string;
+  status?: WorkflowRunStatus;
+};
+
+export type WorkflowAgentUsage = {
+  totalTokens?: number;
+  toolUses?: number;
+  durationMs?: number;
+};
+
+export type WorkflowAgent = {
+  id: string;
+  label?: string;
+  status?: WorkflowRunStatus;
+  phase?: string;
+  phaseTitle?: string;
+  currentPhase?: string;
+  currentAction?: string;
+  lastToolName?: string;
+  usage?: WorkflowAgentUsage;
+  updatedAt?: string;
+  rawSdkEvent?: unknown;
+};
+
+export type WorkflowRun = {
+  workflowName?: string;
+  name?: string;
+  description?: string;
+  toolUseId?: string;
+  taskId?: string;
+  runId?: string;
+  status?: WorkflowRunStatus;
+  taskType?: string;
+  phases?: WorkflowPhase[];
+  currentPhase?: string;
+  agentsRunning?: number;
+  workflowAgents?: WorkflowAgent[];
+  usage?: WorkflowAgentUsage;
+  progress?: string;
+  summary?: string;
+  error?: string;
+  warning?: string;
+  scriptPath?: string;
+  transcriptDir?: string;
+  sessionUrl?: string;
+  lastToolName?: string;
+  startedAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  rawInput?: unknown;
+  rawOutput?: unknown;
+  rawSdkEvent?: unknown;
+};
+
+export type WorkflowUpdateContent = {
+  sessionId?: string;
+  workflow: WorkflowRun;
+  runs?: WorkflowRun[];
+  sourceMessageSubtype?: string;
+};
+
+export type IMessageWorkflowUpdate = IMessage<'workflow_update', WorkflowUpdateContent>;
+
 // eslint-disable-next-line max-len
 export type TMessage =
   | IMessageText
@@ -394,6 +462,131 @@ export interface IConfirmation<Option extends any = any> {
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isWorkflowUpdateData = (value: unknown): value is WorkflowUpdateContent => {
+  if (!isObject(value)) return false;
+  return isObject(value.workflow);
+};
+
+const readString = (value: Record<string, unknown>, ...keys: string[]): string | undefined =>
+  keys.map((key) => value[key]).find((item): item is string => typeof item === 'string' && item.length > 0);
+
+const readNumber = (value: Record<string, unknown>, ...keys: string[]): number | undefined => {
+  const key = keys.find((candidate) => typeof value[candidate] === 'number');
+  return key ? (value[key] as number) : undefined;
+};
+
+export const normalizeWorkflowPhase = (phase: unknown): WorkflowPhase | undefined => {
+  if (!isObject(phase)) return undefined;
+  const title = readString(phase, 'title');
+  if (!title) return undefined;
+  return {
+    title,
+    detail: readString(phase, 'detail'),
+    status: readString(phase, 'status'),
+  };
+};
+
+const normalizeWorkflowAgentUsage = (usage: unknown): WorkflowAgentUsage | undefined => {
+  if (!isObject(usage)) return undefined;
+  const normalized = {
+    totalTokens: readNumber(usage, 'totalTokens', 'total_tokens'),
+    toolUses: readNumber(usage, 'toolUses', 'tool_uses'),
+    durationMs: readNumber(usage, 'durationMs', 'duration_ms'),
+  };
+  return Object.values(normalized).some((value) => value !== undefined) ? normalized : undefined;
+};
+
+export const normalizeWorkflowAgent = (agent: unknown): WorkflowAgent | undefined => {
+  if (!isObject(agent)) return undefined;
+  const id = readString(agent, 'id', 'toolUseId', 'tool_use_id', 'taskId', 'task_id');
+  if (!id) return undefined;
+  return {
+    ...agent,
+    id,
+    label: readString(agent, 'label', 'name'),
+    status: readString(agent, 'status'),
+    phase: readString(agent, 'phase'),
+    phaseTitle: readString(agent, 'phaseTitle', 'phase_title'),
+    currentPhase: readString(agent, 'currentPhase', 'current_phase'),
+    currentAction: readString(agent, 'currentAction', 'current_action', 'description', 'summary'),
+    lastToolName: readString(agent, 'lastToolName', 'last_tool_name'),
+    usage: normalizeWorkflowAgentUsage(agent.usage),
+    updatedAt: readString(agent, 'updatedAt', 'updated_at'),
+    rawSdkEvent: agent.rawSdkEvent ?? agent.raw_sdk_event,
+  };
+};
+
+export const normalizeWorkflowRun = (run: unknown): WorkflowRun | undefined => {
+  if (!isObject(run)) return undefined;
+  const phases = Array.isArray(run.phases)
+    ? run.phases.map(normalizeWorkflowPhase).filter((phase): phase is WorkflowPhase => Boolean(phase))
+    : undefined;
+  const rawWorkflowAgents = run.workflowAgents ?? run.workflow_agents;
+  const workflowAgents = Array.isArray(rawWorkflowAgents)
+    ? rawWorkflowAgents.map(normalizeWorkflowAgent).filter((agent): agent is WorkflowAgent => Boolean(agent))
+    : undefined;
+  return {
+    ...run,
+    workflowName: readString(run, 'workflowName', 'workflow_name') ?? (run.workflowName as string | undefined),
+    name: readString(run, 'name'),
+    description: readString(run, 'description'),
+    toolUseId: readString(run, 'toolUseId', 'tool_use_id'),
+    taskId: readString(run, 'taskId', 'task_id'),
+    runId: readString(run, 'runId', 'run_id'),
+    status: readString(run, 'status'),
+    taskType: readString(run, 'taskType', 'task_type'),
+    phases: phases?.length ? phases : undefined,
+    currentPhase: readString(run, 'currentPhase', 'current_phase'),
+    agentsRunning: readNumber(run, 'agentsRunning', 'agents_running'),
+    workflowAgents: workflowAgents?.length ? workflowAgents : undefined,
+    usage: normalizeWorkflowAgentUsage(run.usage),
+    progress: readString(run, 'progress'),
+    summary: readString(run, 'summary'),
+    error: readString(run, 'error'),
+    warning: readString(run, 'warning'),
+    scriptPath: readString(run, 'scriptPath', 'script_path'),
+    transcriptDir: readString(run, 'transcriptDir', 'transcript_dir'),
+    sessionUrl: readString(run, 'sessionUrl', 'session_url'),
+    lastToolName: readString(run, 'lastToolName', 'last_tool_name'),
+    startedAt: readString(run, 'startedAt', 'started_at'),
+    updatedAt: readString(run, 'updatedAt', 'updated_at'),
+    completedAt: readString(run, 'completedAt', 'completed_at'),
+    rawInput: run.rawInput ?? run.raw_input,
+    rawOutput: run.rawOutput ?? run.raw_output,
+    rawSdkEvent: run.rawSdkEvent ?? run.raw_sdk_event,
+  };
+};
+
+export const normalizeWorkflowRuns = (value: unknown): WorkflowRun[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const runs = value.map(normalizeWorkflowRun).filter((run): run is WorkflowRun => Boolean(run));
+  return runs.length ? runs : undefined;
+};
+
+export const getWorkflowRunKey = (workflow: WorkflowRun, fallback = 'workflow'): string =>
+  workflow.runId || workflow.taskId || workflow.toolUseId || workflow.workflowName || workflow.name || fallback;
+
+export const mergeWorkflowUpdateContent = (
+  existing: WorkflowUpdateContent,
+  incoming: WorkflowUpdateContent
+): WorkflowUpdateContent => ({
+  ...existing,
+  ...incoming,
+  workflow: {
+    ...existing.workflow,
+    ...incoming.workflow,
+    currentPhase: incoming.workflow.currentPhase,
+    lastToolName: incoming.workflow.lastToolName ?? existing.workflow.lastToolName,
+    progress: incoming.workflow.progress ?? existing.workflow.progress,
+    summary: incoming.workflow.summary ?? existing.workflow.summary,
+    phases: incoming.workflow.phases?.length ? incoming.workflow.phases : existing.workflow.phases,
+    workflowAgents: incoming.workflow.workflowAgents?.length
+      ? incoming.workflow.workflowAgents
+      : existing.workflow.workflowAgents,
+  },
+  runs: incoming.runs?.length ? incoming.runs : existing.runs,
+});
 
 const AGENT_ERROR_OWNERSHIPS = new Set<AgentErrorOwnership>([
   'aionui',
@@ -489,6 +682,33 @@ export const normalizeAgentStreamError = (value: unknown): AgentStreamErrorInfo 
 /**
  * @description 将后端返回的消息转换为前端消息
  * */
+export const transformWorkflowUpdateMessage = (message: IResponseMessage): IMessageWorkflowUpdate | undefined => {
+  if (message.type !== 'workflow_update' || !isWorkflowUpdateData(message.data)) {
+    return undefined;
+  }
+  const workflow = normalizeWorkflowRun(message.data.workflow);
+  if (!workflow) {
+    return undefined;
+  }
+  const created_at = message.created_at ?? Date.now();
+  return {
+    id: uuid(),
+    type: 'workflow_update',
+    msg_id: message.msg_id,
+    position: 'left',
+    conversation_id: message.conversation_id,
+    created_at,
+    content: {
+      sessionId: message.data.sessionId ?? (message.data as { session_id?: string }).session_id,
+      workflow,
+      runs: normalizeWorkflowRuns(message.data.runs),
+      sourceMessageSubtype:
+        message.data.sourceMessageSubtype ??
+        (message.data as { source_message_subtype?: string }).source_message_subtype,
+    },
+  };
+};
+
 export const transformMessage = (message: IResponseMessage): TMessage | undefined => {
   const created_at = message.created_at ?? Date.now();
   switch (message.type) {
@@ -675,6 +895,7 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
     }
     // Disabled: available_commands messages are too noisy and distracting in the chat UI
     case 'available_commands':
+    case 'workflow_update':
       return undefined;
     case 'start':
     case 'finish':
@@ -684,6 +905,7 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
     case 'info': // Stream retry notifications and similar transient agent updates
     case 'system': // Cron system responses, ignored
     case 'acp_model_info': // Model info updates, handled by AcpModelSelector
+    case 'acp_mode_info': // Mode info updates, handled by AgentModeSelector
     case 'codex_model_info': // Legacy Codex model info updates
     case 'acp_context_usage': // Context usage updates, handled by AcpSendBox
     case 'request_trace': // Request trace events, logged to F12 console (not persisted)

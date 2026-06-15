@@ -8,6 +8,19 @@
  * AionUI应用程序共用常量
  */
 
+declare const __APP_PRODUCT_NAME__: string;
+
+const resolveAppProductName = (): string => {
+  try {
+    return __APP_PRODUCT_NAME__ || 'senmoAI';
+  } catch {
+    return 'senmoAI';
+  }
+};
+
+/** 当前构建对外展示的应用品牌名 */
+export const APP_PRODUCT_NAME = resolveAppProductName();
+
 // ===== 文件处理相关常量 =====
 
 /** 临时文件时间戳分隔符 */

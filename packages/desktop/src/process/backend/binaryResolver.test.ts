@@ -14,6 +14,8 @@ vi.mock('node:fs', () => ({
 }));
 
 const originalResourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+const originalBackendBinaryOverride = process.env.AIONUI_BACKEND_BINARY;
+const originalBackendBundledDirOverride = process.env.AIONUI_BACKEND_BUNDLED_DIR;
 
 function setResourcesPath(resourcesPath: string | undefined): void {
   Object.defineProperty(process, 'resourcesPath', {
@@ -32,10 +34,22 @@ function dirEntry(name: string, isDirectory = false): ReturnType<typeof readdirS
 describe('resolveBinaryPath', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.AIONUI_BACKEND_BINARY;
+    delete process.env.AIONUI_BACKEND_BUNDLED_DIR;
   });
 
   afterEach(() => {
     setResourcesPath(originalResourcesPath);
+    if (originalBackendBinaryOverride) {
+      process.env.AIONUI_BACKEND_BINARY = originalBackendBinaryOverride;
+    } else {
+      delete process.env.AIONUI_BACKEND_BINARY;
+    }
+    if (originalBackendBundledDirOverride) {
+      process.env.AIONUI_BACKEND_BUNDLED_DIR = originalBackendBundledDirOverride;
+    } else {
+      delete process.env.AIONUI_BACKEND_BUNDLED_DIR;
+    }
   });
 
   it('attaches bundled path diagnostics when aioncore cannot be resolved', () => {
@@ -78,5 +92,25 @@ describe('resolveBinaryPath', () => {
         }),
       });
     }
+  });
+
+  it('prefers AIONUI_BACKEND_BINARY when explicitly provided', () => {
+    process.env.AIONUI_BACKEND_BINARY = '/custom/bin/aioncore';
+    vi.mocked(existsSync).mockImplementation((path) => path === '/custom/bin/aioncore');
+
+    expect(resolveBinaryPath()).toBe('/custom/bin/aioncore');
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it('falls back to repository resources during desktop development', () => {
+    const runtimeKey = `${process.platform}-${process.arch}`;
+    const binaryName = process.platform === 'win32' ? 'aioncore.exe' : 'aioncore';
+    const devCandidate = join(process.cwd(), 'resources', 'bundled-aioncore', runtimeKey, binaryName);
+
+    setResourcesPath('/Electron/resources');
+    vi.mocked(existsSync).mockImplementation((path) => path === devCandidate);
+
+    expect(resolveBinaryPath()).toBe(devCandidate);
+    expect(execSync).not.toHaveBeenCalled();
   });
 });

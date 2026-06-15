@@ -19,6 +19,30 @@ import { warmupConversation } from '@/renderer/pages/conversation/utils/warmupCo
 import type { ThoughtData } from '@/renderer/components/chat/ThoughtDisplay';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+export type AcpModeInfo = {
+  current_mode_id?: string;
+  available_modes?: Array<{
+    id: string;
+    name?: string;
+  }>;
+};
+
+type RawAcpModeInfo = AcpModeInfo & {
+  currentModeId?: string;
+  availableModes?: AcpModeInfo['available_modes'];
+};
+
+const normalizeAcpModeInfo = (value: unknown): AcpModeInfo | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const data = value as RawAcpModeInfo;
+  return {
+    current_mode_id: data.current_mode_id ?? data.currentModeId,
+    available_modes: data.available_modes ?? data.availableModes,
+  };
+};
+
 export type UseAcpMessageReturn = {
   thought: ThoughtData;
   setThought: React.Dispatch<React.SetStateAction<ThoughtData>>;
@@ -33,6 +57,7 @@ export type UseAcpMessageReturn = {
   hasThinkingMessage: boolean;
   slashCommands: SlashCommandItem[];
   fetchSlashCommands: () => void;
+  modeInfo: AcpModeInfo | null;
 };
 
 export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: boolean }): UseAcpMessageReturn => {
@@ -50,6 +75,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
   const [context_limit, setContextLimit] = useState<number>(0);
   const [slashCommands, setSlashCommands] = useState<SlashCommandItem[]>([]);
+  const [modeInfo, setModeInfo] = useState<AcpModeInfo | null>(null);
 
   // Use refs to sync state for immediate access in event handlers
   const runningRef = useRef(running);
@@ -192,6 +218,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
           'request_trace',
           'acp_context_usage',
           'acp_model_info',
+          'acp_mode_info',
           'codex_model_info',
           'available_commands',
           'slash_commands_updated',
@@ -383,6 +410,10 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
         case 'acp_model_info':
           // Model info updates are handled by AcpModelSelector, no action needed here
           break;
+        case 'acp_mode_info': {
+          setModeInfo(normalizeAcpModeInfo(message.data));
+          break;
+        }
         case 'slash_commands_updated':
           // Slash commands became available (often during bootstrap when
           // agent_status events are suppressed). Update acpStatus so
@@ -480,6 +511,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     setTokenUsage(null);
     setContextLimit(0);
     setSlashCommands([]);
+    setModeInfo(null);
     hasContentInTurnRef.current = false;
     turnFinishedRef.current = false;
     hasThinkingMessageRef.current = false;
@@ -612,5 +644,6 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     hasThinkingMessage,
     slashCommands,
     fetchSlashCommands,
+    modeInfo,
   };
 };

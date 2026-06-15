@@ -26,6 +26,17 @@ import { useAgentAvailability } from './useAgentAvailability';
 import { useCustomAgentsLoader } from './useCustomAgentsLoader';
 import { isSupportedNewConversationAgent } from '@/renderer/utils/model/agentTypeSupportPolicy';
 
+const EMPTY_GUID_HOME_AGENT_KEY = '';
+const HIDDEN_GUID_HOME_AGENT_TYPES = new Set(['aionrs']);
+
+export function isGuidHomeSelectableAgent(agent: { agent_type: string }): boolean {
+  return isSupportedNewConversationAgent(agent) && !HIDDEN_GUID_HOME_AGENT_TYPES.has(agent.agent_type);
+}
+
+export function resolveGuidHomeInitialAgentKey(savedKey: string | null | undefined): string {
+  return savedKey && !HIDDEN_GUID_HOME_AGENT_TYPES.has(savedKey) ? savedKey : EMPTY_GUID_HOME_AGENT_KEY;
+}
+
 export type GuidAgentSelectionResult = {
   selectedAgentKey: string;
   setSelectedAgentKey: (key: string) => void;
@@ -128,9 +139,9 @@ export const useGuidAgentSelection = ({
 }: UseGuidAgentSelectionOptions): GuidAgentSelectionResult => {
   const [selectedAgentKey, _setSelectedAgentKey] = useState<string>(() => {
     try {
-      return configService.get('guid.lastSelectedAgent') || 'aionrs';
+      return resolveGuidHomeInitialAgentKey(configService.get('guid.lastSelectedAgent'));
     } catch {
-      return 'aionrs';
+      return EMPTY_GUID_HOME_AGENT_KEY;
     }
   });
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>();
@@ -271,7 +282,7 @@ export const useGuidAgentSelection = ({
     // exposed as `avatar` so AgentPillBar renders the glyph directly
     // instead of mistaking it for a logo URL.
     const normalisedDetected: AvailableAgent[] = availableAgentsData
-      .filter(isSupportedNewConversationAgent)
+      .filter(isGuidHomeSelectableAgent)
       .map((a) => {
         const asAgent = a as AgentMetadata;
         const isCustomRow = asAgent.agent_source === 'custom';
@@ -324,7 +335,7 @@ export const useGuidAgentSelection = ({
       const currentIsPreset = selectedAgentKey.startsWith('custom:');
       if (currentIsPreset) {
         const firstCliAgent = availableAgents.find((a) => !a.is_preset);
-        const fallbackKey = firstCliAgent ? getAgentKey(firstCliAgent) : 'aionrs';
+        const fallbackKey = firstCliAgent ? getAgentKey(firstCliAgent) : EMPTY_GUID_HOME_AGENT_KEY;
         _setSelectedAgentKey(fallbackKey);
         configService.set('guid.lastSelectedAgent', fallbackKey).catch((error) => {
           console.error('Failed to save reset agent key:', error);
@@ -510,7 +521,7 @@ export const useGuidAgentSelection = ({
   // Key of the first non-preset CLI agent (used as fallback when leaving preset mode)
   const defaultAgentKey = useMemo(() => {
     const firstCliAgent = availableAgents?.find((a) => !a.is_preset);
-    return firstCliAgent ? getAgentKey(firstCliAgent) : 'aionrs';
+    return firstCliAgent ? getAgentKey(firstCliAgent) : EMPTY_GUID_HOME_AGENT_KEY;
   }, [availableAgents]);
 
   return {

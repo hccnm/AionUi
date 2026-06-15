@@ -8,11 +8,14 @@ import { describe, expect, it } from 'vitest';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import {
   composeMessage,
+  getWorkflowRunKey,
   normalizeAgentStreamError,
   transformMessage,
+  transformWorkflowUpdateMessage,
   type IMessageTips,
   type IMessageAcpToolCall,
   type IMessageThinking,
+  type IMessageWorkflowUpdate,
   type TMessage,
 } from '@/common/chat/chatLib';
 
@@ -280,5 +283,88 @@ describe('transformMessage', () => {
         command_count: 3,
       },
     });
+  });
+
+  it('normalizes snake_case workflow_update events for the workflow monitor', () => {
+    const message: IResponseMessage = {
+      type: 'workflow_update',
+      data: {
+        session_id: 'sess-1',
+        source_message_subtype: 'tool_call_update',
+        workflow: {
+          workflow_name: 'execute-order-test-cases',
+          tool_use_id: 'toolu-1',
+          task_id: 'task-1',
+          run_id: 'wf_123',
+          status: 'running',
+          last_tool_name: 'Read',
+          workflow_agents: [
+            {
+              id: 'agent-1',
+              label: 'env-prepare',
+              status: 'running',
+              phase_title: '环境准备',
+              current_phase: '环境准备',
+              current_action: '检查应用状态',
+              usage: { total_tokens: 42, tool_uses: 3, duration_ms: 1000 },
+              updated_at: '2026-06-11T07:00:00.000Z',
+              raw_sdk_event: { subtype: 'task_progress' },
+            },
+          ],
+          script_path: '/repo/.claude/workflows/execute-order-test-cases.js',
+          transcript_dir: '/tmp/workflows/wf_123',
+          raw_input: { scriptPath: '/repo/.claude/workflows/execute-order-test-cases.js' },
+          raw_sdk_event: { subtype: 'task_progress', last_tool_name: 'Read' },
+          phases: [{ title: '环境准备', detail: '检查服务状态' }],
+        },
+      },
+      msg_id: 'wf-msg',
+      conversation_id: CONVERSATION_ID,
+    };
+
+    const transformed = transformWorkflowUpdateMessage(message) as IMessageWorkflowUpdate;
+
+    expect(transformed.type).toBe('workflow_update');
+    expect(transformed.content.sessionId).toBe('sess-1');
+    expect(transformed.content.workflow.workflowName).toBe('execute-order-test-cases');
+    expect(transformed.content.workflow.toolUseId).toBe('toolu-1');
+    expect(transformed.content.workflow.runId).toBe('wf_123');
+    expect(transformed.content.workflow.lastToolName).toBe('Read');
+    expect(transformed.content.workflow.workflowAgents?.[0]).toMatchObject({
+      id: 'agent-1',
+      label: 'env-prepare',
+      status: 'running',
+      phaseTitle: '环境准备',
+      currentPhase: '环境准备',
+      currentAction: '检查应用状态',
+      usage: { totalTokens: 42, toolUses: 3, durationMs: 1000 },
+    });
+    expect(transformed.content.workflow.rawInput).toEqual({
+      scriptPath: '/repo/.claude/workflows/execute-order-test-cases.js',
+    });
+    expect(transformed.content.workflow.rawSdkEvent).toEqual({ subtype: 'task_progress', last_tool_name: 'Read' });
+    expect(transformed.content.workflow.phases?.[0].title).toBe('环境准备');
+  });
+
+  it('uses toolUseId as workflow key before taskId or runId exists', () => {
+    const message: IResponseMessage = {
+      type: 'workflow_update',
+      data: {
+        session_id: 'sess-approval',
+        workflow: {
+          workflow_name: 'execute-order-test-cases',
+          tool_use_id: 'toolu-approval',
+          status: 'pending',
+          progress: 'Awaiting workflow approval',
+        },
+      },
+      msg_id: 'wf-approval',
+      conversation_id: CONVERSATION_ID,
+    };
+
+    const transformed = transformWorkflowUpdateMessage(message) as IMessageWorkflowUpdate;
+
+    expect(transformed.content.workflow.toolUseId).toBe('toolu-approval');
+    expect(getWorkflowRunKey(transformed.content.workflow, 'fallback')).toBe('toolu-approval');
   });
 });

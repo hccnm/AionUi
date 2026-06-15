@@ -21,6 +21,7 @@ import React from 'react';
 import AcpE2EStreamInjector from './AcpE2EStreamInjector';
 import AcpSendBox from './AcpSendBox';
 import { useAcpMessage } from './useAcpMessage';
+import WorkflowMonitorDock from '../../workflows/WorkflowMonitorDock';
 
 const AcpChat: React.FC<{
   conversation_id: string;
@@ -71,16 +72,19 @@ const AcpChat: React.FC<{
             <MessageList className='flex-1' emptySlot={emptySlot} />
           </FlexFullContainer>
           <AcpE2EStreamInjector conversationId={conversation_id} />
-          {!hideSendBox && (
-            <AcpSendBox
-              conversation_id={conversation_id}
-              backend={backend}
-              session_mode={session_mode}
-              agent_name={agent_name}
-              workspacePath={workspace}
-              messageState={messageState}
-            ></AcpSendBox>
-          )}
+          <div className='max-w-800px w-full mx-auto mt-auto flex flex-col'>
+            <WorkflowMonitorDock conversationId={conversation_id} workspacePath={workspace} />
+            {!hideSendBox && (
+              <AcpSendBox
+                conversation_id={conversation_id}
+                backend={backend}
+                session_mode={session_mode}
+                agent_name={agent_name}
+                workspacePath={workspace}
+                messageState={messageState}
+              ></AcpSendBox>
+            )}
+          </div>
         </div>
       </ConversationArtifactProvider>
     </ConversationProvider>
