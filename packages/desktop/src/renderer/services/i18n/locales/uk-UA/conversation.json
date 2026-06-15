@@ -492,6 +492,9 @@
       },
       "ACP_EMPTY_TURN_REFUSAL": {
         "body": "Модель відхилила цей запит до появи видимої відповіді."
+      },
+      "ACP_MODE_SWITCHED_PLAN": {
+        "body": "Перемкнено в режим Plan."
       }
     }
   },

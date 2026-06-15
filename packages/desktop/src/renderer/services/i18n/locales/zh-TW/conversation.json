@@ -493,6 +493,9 @@
       },
       "ACP_EMPTY_TURN_REFUSAL": {
         "body": "模型在產生任何可見回覆前拒絕了這次請求。"
+      },
+      "ACP_MODE_SWITCHED_PLAN": {
+        "body": "已切換到 Plan 模式。"
       }
     }
   },

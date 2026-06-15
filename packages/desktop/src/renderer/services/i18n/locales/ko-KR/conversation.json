@@ -493,6 +493,9 @@
       },
       "ACP_EMPTY_TURN_REFUSAL": {
         "body": "모델이 표시 가능한 응답을 생성하기 전에 이번 요청을 거부했습니다."
+      },
+      "ACP_MODE_SWITCHED_PLAN": {
+        "body": "Plan 모드로 전환했습니다."
       }
     }
   },

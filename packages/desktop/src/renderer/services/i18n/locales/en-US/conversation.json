@@ -493,6 +493,9 @@
       },
       "ACP_EMPTY_TURN_REFUSAL": {
         "body": "The model refused this request before producing any visible reply."
+      },
+      "ACP_MODE_SWITCHED_PLAN": {
+        "body": "Switched to Plan mode."
       }
     }
   },
