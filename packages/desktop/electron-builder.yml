@@ -1,7 +1,7 @@
 appId: com.aionui.app
-productName: AionUi
-executableName: AionUi
-copyright: Copyright © 2024 AionUi
+productName: senmoAI
+executableName: senmoAI
+copyright: Copyright © 2024 senmoAI
 
 protocols:
   - name: AionUi Protocol
@@ -178,7 +178,7 @@ linux:
   description: ${description}
   desktop:
     entry:
-      Name: AionUi
+      Name: senmoAI
       Comment: ${description}
       Icon: aionui
       Categories: Office;Utility;
@@ -221,7 +221,7 @@ electronDownload:
 
 publish:
   provider: github
-  owner: iOfficeAI
+  owner: hccnm
   repo: AionUi
   publishAutoUpdate: true
   releaseType: release

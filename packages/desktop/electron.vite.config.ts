@@ -11,6 +11,7 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 // `packages/desktop/package.json` is a workspace-internal placeholder pinned
 // at "0.0.0" — never use it for user-visible version strings.
 const rootPackageJson = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8')) as {
+  productName: string;
   version: string;
 };
 
@@ -143,6 +144,7 @@ export default defineConfig(({ mode }) => {
         'process.env.NODE_ENV': JSON.stringify(mode),
         'process.env.env': JSON.stringify(process.env.env),
         'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN ?? ''),
+        __APP_PRODUCT_NAME__: JSON.stringify(rootPackageJson.productName),
       },
     },
 
@@ -159,6 +161,9 @@ export default defineConfig(({ mode }) => {
           '@common': resolve('packages/desktop/src/common'),
         },
         extensions: ['.ts', '.tsx', '.js', '.json'],
+      },
+      define: {
+        __APP_PRODUCT_NAME__: JSON.stringify(rootPackageJson.productName),
       },
       build: {
         sourcemap: false,
@@ -289,6 +294,7 @@ export default defineConfig(({ mode }) => {
         'process.env.env': JSON.stringify(process.env.env),
         'process.env.AIONUI_MULTI_INSTANCE': JSON.stringify(process.env.AIONUI_MULTI_INSTANCE ?? ''),
         'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN ?? ''),
+        __APP_PRODUCT_NAME__: JSON.stringify(rootPackageJson.productName),
         // Inject the real AionUi version (root package.json) so renderer code
         // can show it without importing packages/desktop/package.json, which is
         // a workspace-internal placeholder frozen at "0.0.0".

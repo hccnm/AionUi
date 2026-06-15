@@ -17,9 +17,17 @@ cd AionUi
 # Install dependencies
 bun install
 
+# Prepare the local aioncore bundle used by desktop dev startup
+node scripts/prepareAioncore.js
+
 # Start development server (Electron desktop mode)
 bun start
 ```
+
+Desktop development mode needs a local `aioncore` backend. The preparation step
+above downloads it into `resources/bundled-aioncore/<platform>-<arch>/`. If you
+already have a built backend binary, you can skip the download and launch with
+`AIONUI_BACKEND_BINARY=/abs/path/to/aioncore bun start` instead.
 
 ## Scripts Reference
 

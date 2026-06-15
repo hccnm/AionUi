@@ -11,6 +11,7 @@ import {
   electronNativeImage as nativeImage,
   electronTray as Tray,
 } from '@/common/electronSafe';
+import { APP_PRODUCT_NAME } from '@/common/config/constants';
 import * as path from 'path';
 import { ipcBridge } from '@/common';
 import i18n from '@process/services/i18n';
@@ -243,7 +244,7 @@ export const createOrUpdateTray = (): void => {
   try {
     const icon = getTrayIcon();
     tray = new Tray(icon);
-    tray.setToolTip('AionUi');
+    tray.setToolTip(APP_PRODUCT_NAME);
     void buildTrayContextMenu().then((menu) => tray?.setContextMenu(menu));
 
     tray.on('double-click', () => {

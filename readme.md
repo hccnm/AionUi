@@ -695,9 +695,15 @@ Tech stack: Electron · Vite · React · Bun
 
 ```bash
 bun install        # install dependencies
+node scripts/prepareAioncore.js
 bun run dev        # start dev server
 bun run test       # run unit tests
 ```
+
+`bun run dev` needs a local `aioncore` backend. The command above downloads the
+backend bundle into `resources/bundled-aioncore/<platform>-<arch>/` so the
+desktop app can start in development mode. If you already have a local backend
+binary, you can also point AionUi at it with `AIONUI_BACKEND_BINARY=/abs/path/to/aioncore`.
 
 ---
 
