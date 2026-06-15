@@ -1,0 +1,497 @@
+.workflowCard {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(74, 91, 125, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(246, 249, 255, 0.98), rgba(255, 255, 255, 0.94)),
+    radial-gradient(circle at 16% 0%, rgba(107, 142, 255, 0.15), transparent 34%);
+  box-shadow: 0 18px 48px rgba(44, 57, 88, 0.12);
+  color: #1d2638;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px 12px;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: #6b7894;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 760;
+}
+
+.description {
+  margin: 8px 0 0;
+  color: #657187;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.statusBadge {
+  flex: none;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 760;
+  background: #eef2f8;
+  color: #52627a;
+}
+
+.status_running {
+  background: #e9f4ff;
+  color: #1667b7;
+}
+
+.status_completed {
+  background: #e9f9ef;
+  color: #177245;
+}
+
+.status_failed {
+  background: #fff0ed;
+  color: #b83b2e;
+}
+
+.status_stopped {
+  background: #f3f0ff;
+  color: #6148b7;
+}
+
+.status_not_started {
+  background: #f2f4f8;
+  color: #637087;
+}
+
+.waiting {
+  margin: 0 20px 14px;
+  border-left: 3px solid #4c8dff;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgba(76, 141, 255, 0.08);
+  color: #315b9d;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 20px 16px;
+}
+
+.metaPair {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7890;
+  font-size: 12px;
+}
+
+.metaPair span {
+  flex: none;
+  font-weight: 700;
+}
+
+.metaPair code,
+.historyMeta code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 7px;
+  padding: 2px 6px;
+  background: rgba(50, 63, 88, 0.07);
+  color: #344057;
+  font-size: 12px;
+}
+
+.monitor {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  border-top: 1px solid rgba(74, 91, 125, 0.14);
+  border-bottom: 1px solid rgba(74, 91, 125, 0.14);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.phaseRail {
+  border-right: 1px solid rgba(74, 91, 125, 0.14);
+  padding: 14px 12px;
+  background: rgba(246, 248, 252, 0.76);
+}
+
+.phaseTitle {
+  margin: 0 0 10px;
+  color: #66738d;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.phaseRow {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  align-items: flex-start;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 8px;
+  background: transparent;
+  color: #69758a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.phaseRow > span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #e8edf5;
+  color: #62708a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.phaseRow strong {
+  display: block;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.phaseRow small {
+  display: block;
+  margin-top: 3px;
+  color: #7a8598;
+  line-height: 1.35;
+}
+
+.phaseRow:hover {
+  background: rgba(228, 235, 247, 0.7);
+}
+
+.phaseCurrent {
+  box-shadow: inset 3px 0 0 #1fb861;
+}
+
+.phaseSelected {
+  background: rgba(76, 141, 255, 0.1);
+  outline: 1px solid rgba(76, 141, 255, 0.2);
+}
+
+.phase_completed > span {
+  background: #dff7e8;
+  color: #147241;
+}
+
+.phase_running > span {
+  background: #dcecff;
+  color: #1967b7;
+}
+
+.phase_failed > span {
+  background: #ffe1dc;
+  color: #b83b2e;
+}
+
+.phase_stopped > span {
+  background: #ebe5ff;
+  color: #6248b6;
+}
+
+.emptyPhases {
+  border: 1px dashed rgba(87, 103, 133, 0.28);
+  border-radius: 12px;
+  padding: 16px 12px;
+  color: #7c879a;
+  font-size: 13px;
+}
+
+.livePane {
+  min-width: 0;
+  padding: 15px 18px 18px;
+}
+
+.liveHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #25304a;
+  font-size: 14px;
+}
+
+.liveHeader > div {
+  min-width: 0;
+}
+
+.liveHeader p {
+  margin: 5px 0 0;
+  color: #6a768d;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.liveHeader span {
+  flex: none;
+  color: #657187;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.failureBanner {
+  margin: 12px 0 0;
+  border-left: 3px solid #d64b3c;
+  border-radius: 10px;
+  padding: 8px 11px;
+  background: #fff4f1;
+  color: #9a3328;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.reason {
+  min-height: 86px;
+  margin: 12px 0 0;
+  border-radius: 14px;
+  padding: 13px 14px;
+  background: #f7f9fc;
+  color: #4a566d;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.agentTable {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agentRow {
+  border: 1px solid rgba(74, 91, 125, 0.11);
+  border-radius: 13px;
+  padding: 10px 11px;
+  background: #f8faff;
+}
+
+.agentTopLine {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.agentName {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agentName > div {
+  min-width: 0;
+}
+
+.agentName strong {
+  display: block;
+  overflow: hidden;
+  color: #273149;
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentName small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #7a8598;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #9aa6bb;
+  box-shadow: 0 0 0 3px rgba(154, 166, 187, 0.14);
+}
+
+.agent_running {
+  background: #1b7ee8;
+  box-shadow: 0 0 0 3px rgba(27, 126, 232, 0.14);
+}
+
+.agent_completed {
+  background: #18a85b;
+  box-shadow: 0 0 0 3px rgba(24, 168, 91, 0.14);
+}
+
+.agent_failed {
+  background: #d64b3c;
+  box-shadow: 0 0 0 3px rgba(214, 75, 60, 0.14);
+}
+
+.agent_stopped {
+  background: #7657d9;
+  box-shadow: 0 0 0 3px rgba(118, 87, 217, 0.14);
+}
+
+.agentAction {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  margin: 8px 0 0;
+  color: #4a566d;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.agentMeta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.agentMeta code {
+  max-width: 132px;
+  overflow: hidden;
+  border-radius: 7px;
+  padding: 3px 6px;
+  background: rgba(50, 63, 88, 0.07);
+  color: #42506b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentMeta span {
+  flex: none;
+  color: #7b879b;
+  font-size: 11px;
+  text-align: right;
+}
+
+.errorReason {
+  background: #fff4f1;
+  color: #9a3328;
+}
+
+.history {
+  padding: 12px 20px 0;
+}
+
+.history summary {
+  cursor: pointer;
+  color: #52617b;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.historyList {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.historyItem {
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(246, 248, 252, 0.84);
+}
+
+.historyItem > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #2c3549;
+  font-size: 13px;
+}
+
+.historyItem > div:first-child span {
+  color: #6a768d;
+  font-weight: 700;
+}
+
+.historyItem p {
+  margin: 6px 0 0;
+  color: #67738a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.historyMeta {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  padding: 13px 20px 16px;
+  color: #66738d;
+}
+
+.controls button {
+  border: 0;
+  border-radius: 9px;
+  padding: 6px 9px;
+  background: transparent;
+  color: #52617b;
+  font-size: 12px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 900px) {
+  .workflowCard {
+    min-width: 0;
+  }
+
+  .monitor {
+    grid-template-columns: 1fr;
+  }
+
+  .phaseRail {
+    border-right: 0;
+    border-bottom: 1px solid rgba(74, 91, 125, 0.14);
+  }
+
+  .metaGrid {
+    grid-template-columns: 1fr;
+  }
+}

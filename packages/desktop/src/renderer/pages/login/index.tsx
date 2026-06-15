@@ -1,6 +1,7 @@
 import loginLogo from '@renderer/assets/logos/brand/app.png';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { APP_PRODUCT_NAME } from '@/common/config/constants';
 import { changeLanguage } from '@/renderer/services/i18n';
 import { useNavigate } from 'react-router-dom';
 import AppLoader from '@renderer/components/layout/AppLoader';
@@ -58,7 +59,7 @@ const LoginPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    document.title = t('login.pageTitle');
+    document.title = t('login.pageTitle', { productName: APP_PRODUCT_NAME });
   }, [t]);
 
   useEffect(() => {
@@ -217,9 +218,9 @@ const LoginPage: React.FC = () => {
 
         <div className='login-page__header'>
           <div className='login-page__logo'>
-            <img src={loginLogo} alt={t('login.brand')} />
+            <img src={loginLogo} alt={APP_PRODUCT_NAME} />
           </div>
-          <h1 className='login-page__title'>{t('login.brand')}</h1>
+          <h1 className='login-page__title'>{APP_PRODUCT_NAME}</h1>
           <p className='login-page__subtitle'>{t('login.subtitle')}</p>
         </div>
 

@@ -1,0 +1,170 @@
+.dock {
+  width: 100%;
+  margin: 8px 0 10px;
+  flex-shrink: 0;
+}
+
+.expandedShell :global([data-testid='workflow-monitor']) {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.expandedToolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.collapseButton,
+.dismissButton {
+  border: 1px solid #d6dce8;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #516070;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.collapseButton:hover {
+  background: #f5f7fb;
+}
+
+.dismissButton {
+  color: #66758a;
+}
+
+.dismissButton:hover {
+  background: #f5f7fb;
+}
+
+.compactBar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d9e0ed;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 10px 30px rgba(31, 46, 70, 0.08);
+  padding: 11px 12px;
+}
+
+.statusDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #93a4b8;
+}
+
+.status_running,
+.status_not_started {
+  background: #20b15a;
+  box-shadow: 0 0 0 4px rgba(32, 177, 90, 0.12);
+}
+
+.status_completed {
+  background: #4f83ff;
+}
+
+.status_failed {
+  background: #e5484d;
+  box-shadow: 0 0 0 4px rgba(229, 72, 77, 0.13);
+}
+
+.status_stopped {
+  background: #f59e0b;
+}
+
+.main {
+  min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+  color: #17202f;
+}
+
+.status {
+  flex-shrink: 0;
+  color: #607086;
+  font-size: 12px;
+}
+
+.summary {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #66758a;
+  font-size: 12px;
+}
+
+.summaryFailed {
+  color: #c53030;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 11px;
+  min-width: 0;
+}
+
+.meta code {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #334155;
+  padding: 2px 5px;
+}
+
+.actionButton,
+.stopButton,
+.dismissCompactButton {
+  border: 1px solid #d6dce8;
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  background: #f3f6fb;
+}
+
+.stopButton {
+  color: #b42318;
+}
+
+.dismissCompactButton {
+  color: #66758a;
+}
+
+.stopButton:disabled {
+  cursor: not-allowed;
+  color: #9aa7b7;
+  background: #f5f7fb;
+}
