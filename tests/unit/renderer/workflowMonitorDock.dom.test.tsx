@@ -262,7 +262,8 @@ describe('WorkflowMonitorDock', () => {
       taskId: 'task-1',
       runId: 'wf_1',
       status: 'completed',
-      scriptPath: '/Users/ethanhuang/Desktop/codespace/test/more-ecommerce-server/.claude/workflows/execute-order-test-cases.js',
+      scriptPath:
+        '/Users/ethanhuang/Desktop/codespace/test/more-ecommerce-server/.claude/workflows/execute-order-test-cases.js',
       summary: '执行完成',
     });
 
@@ -290,7 +291,8 @@ describe('WorkflowMonitorDock', () => {
       taskId: 'task-1',
       runId: 'wf_1',
       status: 'completed',
-      scriptPath: '/Users/ethanhuang/Desktop/codespace/test/more-ecommerce-server/.claude/workflows/execute-order-test-cases.js',
+      scriptPath:
+        '/Users/ethanhuang/Desktop/codespace/test/more-ecommerce-server/.claude/workflows/execute-order-test-cases.js',
       summary: '执行完成',
     });
 

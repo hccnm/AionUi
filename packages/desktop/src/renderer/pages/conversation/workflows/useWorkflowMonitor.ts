@@ -114,7 +114,8 @@ const scriptFromRawInput = (run: WorkflowRun): string | undefined => {
   return undefined;
 };
 
-const hasScriptSource = (run?: WorkflowRun | null): boolean => Boolean(run?.scriptPath || (run && scriptFromRawInput(run)));
+const hasScriptSource = (run?: WorkflowRun | null): boolean =>
+  Boolean(run?.scriptPath || (run && scriptFromRawInput(run)));
 
 const sanitizeWorkflowFileName = (name?: string): string => {
   const sanitized = (name || 'workflow')
@@ -318,9 +319,7 @@ export const useWorkflowMonitor = (conversationId: string, workspacePath?: strin
     if (!activeRun || !activeRunKey || !ACTIVE_STATUSES.has(normalizeStatus(activeRun.status))) return;
 
     if (runtimeView.view.localStopping) {
-      setStopRequestedRunKeys((previous) =>
-        previous.includes(activeRunKey) ? previous : [...previous, activeRunKey]
-      );
+      setStopRequestedRunKeys((previous) => (previous.includes(activeRunKey) ? previous : [...previous, activeRunKey]));
       setConversationStopRunKeys((previous) =>
         previous.includes(activeRunKey) ? previous : [...previous, activeRunKey]
       );
@@ -393,9 +392,7 @@ export const useWorkflowMonitor = (conversationId: string, workspacePath?: strin
       if (error) {
         throw new Error(error);
       }
-      Message.success(
-        t('conversation.workflowMonitor.stopRequested', { defaultValue: 'Workflow stop requested' })
-      );
+      Message.success(t('conversation.workflowMonitor.stopRequested', { defaultValue: 'Workflow stop requested' }));
       void refresh();
     } catch (error) {
       setStopRequestedRunKeys((previous) => previous.filter((key) => key !== activeRunKey));
@@ -431,8 +428,7 @@ export const useWorkflowMonitor = (conversationId: string, workspacePath?: strin
         script =
           (await ipcBridge.fs.readFile
             .invoke({ path: activeRun.scriptPath, workspace: workspacePath })
-            .catch((): null => null)) ??
-          script;
+            .catch((): null => null)) ?? script;
       }
       if (!script) {
         throw new Error(

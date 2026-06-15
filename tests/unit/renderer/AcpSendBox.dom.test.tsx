@@ -19,16 +19,15 @@ const {
   setSendBoxHandlerMock,
   sendBoxPropsMock,
   agentModeSelectorPropsMock,
-} =
-  vi.hoisted(() => ({
-    sendMessageInvokeMock: vi.fn(),
-    addOrUpdateMessageMock: vi.fn(),
-    resetStateMock: vi.fn(),
-    emitterEmitMock: vi.fn(),
-    setSendBoxHandlerMock: vi.fn(),
-    sendBoxPropsMock: vi.fn(),
-    agentModeSelectorPropsMock: vi.fn(),
-  }));
+} = vi.hoisted(() => ({
+  sendMessageInvokeMock: vi.fn(),
+  addOrUpdateMessageMock: vi.fn(),
+  resetStateMock: vi.fn(),
+  emitterEmitMock: vi.fn(),
+  setSendBoxHandlerMock: vi.fn(),
+  sendBoxPropsMock: vi.fn(),
+  agentModeSelectorPropsMock: vi.fn(),
+}));
 
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -227,7 +226,12 @@ describe('AcpSendBox', () => {
     ]);
 
     rerender(
-      <AcpSendBox conversation_id='conv-1' backend='opencode' workspacePath='/tmp/ws' messageState={makeMessageState()} />
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='opencode'
+        workspacePath='/tmp/ws'
+        messageState={makeMessageState()}
+      />
     );
 
     latestProps = sendBoxPropsMock.mock.calls.at(-1)?.[0];

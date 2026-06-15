@@ -72,7 +72,9 @@ const formatUsage = (usage: WorkflowAgentUsage | undefined, t: TLike): string =>
     parts.push(t('conversation.workflowMonitor.tools', { defaultValue: '{{count}} tools', count: usage.toolUses }));
   }
   if (typeof usage.durationMs === 'number') parts.push(formatDuration(usage.durationMs));
-  return parts.length ? parts.join(' · ') : t('conversation.workflowMonitor.noUsageYet', { defaultValue: 'no usage yet' });
+  return parts.length
+    ? parts.join(' · ')
+    : t('conversation.workflowMonitor.noUsageYet', { defaultValue: 'no usage yet' });
 };
 
 const formatDuration = (durationMs?: number): string => {
@@ -178,9 +180,18 @@ const findPhaseByLabel = (phases: WorkflowPhase[], label?: string): number => {
 const findPhaseByKeywords = (phases: WorkflowPhase[], haystack: string): number => {
   if (!haystack) return -1;
 
-  if (['report:', 'write-history', 'test-histories', 'icasehistory', 'generate test report', 'aggregate results', '生成报告', '写入报告'].some((keyword) =>
-    textContains(haystack, keyword)
-  )) {
+  if (
+    [
+      'report:',
+      'write-history',
+      'test-histories',
+      'icasehistory',
+      'generate test report',
+      'aggregate results',
+      '生成报告',
+      '写入报告',
+    ].some((keyword) => textContains(haystack, keyword))
+  ) {
     const reportIndex = phases.findIndex((phase) => {
       const phaseText = phaseSearchText(phase);
       return ['report', '生成报告', '报告', 'test-histories', 'icasehistory', 'aggregate'].some((keyword) =>
@@ -190,9 +201,18 @@ const findPhaseByKeywords = (phases: WorkflowPhase[], haystack: string): number 
     if (reportIndex >= 0) return reportIndex;
   }
 
-  if (['execute:', 'test:case', 'api test cases', 'validate assertions', 'against the running server', 'execute test', '执行测试', '测试用例'].some(
-    (keyword) => textContains(haystack, keyword)
-  )) {
+  if (
+    [
+      'execute:',
+      'test:case',
+      'api test cases',
+      'validate assertions',
+      'against the running server',
+      'execute test',
+      '执行测试',
+      '测试用例',
+    ].some((keyword) => textContains(haystack, keyword))
+  ) {
     const executeIndex = phases.findIndex((phase) => {
       const phaseText = phaseSearchText(phase);
       return ['execute', '执行', '运行', 'test cases', 'running server', '测试'].some((keyword) =>
@@ -202,14 +222,14 @@ const findPhaseByKeywords = (phases: WorkflowPhase[], haystack: string): number 
     if (executeIndex >= 0) return executeIndex;
   }
 
-  if (['discover:', 'scan', 'parse all test case json files', 'parse all test', 'discover', '扫描', '解析', '发现'].some(
-    (keyword) => textContains(haystack, keyword)
-  )) {
+  if (
+    ['discover:', 'scan', 'parse all test case json files', 'parse all test', 'discover', '扫描', '解析', '发现'].some(
+      (keyword) => textContains(haystack, keyword)
+    )
+  ) {
     const discoverIndex = phases.findIndex((phase) => {
       const phaseText = phaseSearchText(phase);
-      return ['discover', 'scan', 'parse', '发现', '扫描', '解析'].some((keyword) =>
-        textContains(phaseText, keyword)
-      );
+      return ['discover', 'scan', 'parse', '发现', '扫描', '解析'].some((keyword) => textContains(phaseText, keyword));
     });
     if (discoverIndex >= 0) return discoverIndex;
   }
@@ -322,7 +342,9 @@ const WorkflowHistory: React.FC<{ runs: WorkflowRun[]; activeKey: string }> = ({
             </p>
             <div className={styles.historyMeta}>
               {run.taskId ? (
-                <code>{t('conversation.workflowMonitor.taskChip', { defaultValue: 'task {{id}}', id: run.taskId })}</code>
+                <code>
+                  {t('conversation.workflowMonitor.taskChip', { defaultValue: 'task {{id}}', id: run.taskId })}
+                </code>
               ) : null}
               {run.runId ? (
                 <code>{t('conversation.workflowMonitor.runChip', { defaultValue: 'run {{id}}', id: run.runId })}</code>
@@ -439,7 +461,10 @@ const MessageWorkflowUpdate: React.FC<MessageWorkflowUpdateProps> = ({
       ) : null}
 
       <div className={styles.metaGrid}>
-        <MetaPair label={t('conversation.workflowMonitor.taskId', { defaultValue: 'Task ID' })} value={activeRun.taskId} />
+        <MetaPair
+          label={t('conversation.workflowMonitor.taskId', { defaultValue: 'Task ID' })}
+          value={activeRun.taskId}
+        />
         <MetaPair label={t('conversation.workflowMonitor.runId', { defaultValue: 'Run ID' })} value={activeRun.runId} />
         <MetaPair
           label={t('conversation.workflowMonitor.toolUseId', { defaultValue: 'Tool Use ID' })}
@@ -449,7 +474,10 @@ const MessageWorkflowUpdate: React.FC<MessageWorkflowUpdateProps> = ({
           label={t('conversation.workflowMonitor.lastTool', { defaultValue: 'Last tool' })}
           value={activeRun.lastToolName}
         />
-        <MetaPair label={t('conversation.workflowMonitor.script', { defaultValue: 'Script' })} value={activeRun.scriptPath} />
+        <MetaPair
+          label={t('conversation.workflowMonitor.script', { defaultValue: 'Script' })}
+          value={activeRun.scriptPath}
+        />
         <MetaPair
           label={t('conversation.workflowMonitor.transcript', { defaultValue: 'Transcript' })}
           value={activeRun.transcriptDir}
@@ -499,9 +527,7 @@ const MessageWorkflowUpdate: React.FC<MessageWorkflowUpdateProps> = ({
                   ? selectedPhase.title
                   : t('conversation.workflowMonitor.currentAgent', { defaultValue: 'Current agent' })}
               </strong>
-              {selectedPhase?.detail ? (
-                <p>{selectedPhase.detail}</p>
-              ) : null}
+              {selectedPhase?.detail ? <p>{selectedPhase.detail}</p> : null}
             </div>
             <span>
               {formatAgentCount(

@@ -281,17 +281,15 @@ export const useGuidAgentSelection = ({
     // tokens / preset resolver). Custom-row `icon` is a user-picked emoji,
     // exposed as `avatar` so AgentPillBar renders the glyph directly
     // instead of mistaking it for a logo URL.
-    const normalisedDetected: AvailableAgent[] = availableAgentsData
-      .filter(isGuidHomeSelectableAgent)
-      .map((a) => {
-        const asAgent = a as AgentMetadata;
-        const isCustomRow = asAgent.agent_source === 'custom';
-        return Object.assign({}, a, {
-          id: asAgent.id,
-          custom_agent_id: isCustomRow ? asAgent.id : (a as AvailableAgent).custom_agent_id,
-          avatar: isCustomRow ? asAgent.icon : (a as AvailableAgent).avatar,
-        });
+    const normalisedDetected: AvailableAgent[] = availableAgentsData.filter(isGuidHomeSelectableAgent).map((a) => {
+      const asAgent = a as AgentMetadata;
+      const isCustomRow = asAgent.agent_source === 'custom';
+      return Object.assign({}, a, {
+        id: asAgent.id,
+        custom_agent_id: isCustomRow ? asAgent.id : (a as AvailableAgent).custom_agent_id,
+        avatar: isCustomRow ? asAgent.icon : (a as AvailableAgent).avatar,
       });
+    });
     setAvailableAgents(normalisedDetected);
   }, [availableAgentsData]);
 

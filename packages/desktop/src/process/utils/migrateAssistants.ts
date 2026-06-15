@@ -64,9 +64,7 @@ function normalisePresetAgentType(raw: unknown): string {
  * a matching built-in. The legacy `builtin-` prefix check handles the common
  * case; this whitelist is the guard for unprefixed ids.
  */
-const PRESET_ID_WHITELIST = new Set<string>([
-  AI_PRODUCT_MANAGER_ASSISTANT_ID,
-]);
+const PRESET_ID_WHITELIST = new Set<string>([AI_PRODUCT_MANAGER_ASSISTANT_ID]);
 
 function isLegacyBuiltin(a: Record<string, unknown>): boolean {
   const id = typeof a.id === 'string' ? a.id : '';
@@ -230,7 +228,9 @@ async function cleanupAiProductManagerDuplicate(configFile: ConfigFile): Promise
     return false;
   }
 
-  const hasBuiltinAiPm = list.some((assistant) => assistant.source === 'builtin' && assistant.id === AI_PRODUCT_MANAGER_ASSISTANT_ID);
+  const hasBuiltinAiPm = list.some(
+    (assistant) => assistant.source === 'builtin' && assistant.id === AI_PRODUCT_MANAGER_ASSISTANT_ID
+  );
   if (!hasBuiltinAiPm) {
     await setMigrationFlag(configFile, AI_PM_DUPLICATE_CLEANUP_FLAG);
     return true;

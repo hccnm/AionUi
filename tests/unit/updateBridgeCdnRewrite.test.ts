@@ -79,8 +79,7 @@ const makeGitHubReleaseResponse = () => [
     assets: [
       {
         name: 'AionUi-1.9.22-mac-arm64.dmg',
-        browser_download_url:
-          'https://github.com/hccnm/AionUi/releases/download/v1.9.22/AionUi-1.9.22-mac-arm64.dmg',
+        browser_download_url: 'https://github.com/hccnm/AionUi/releases/download/v1.9.22/AionUi-1.9.22-mac-arm64.dmg',
         size: 123,
         content_type: 'application/x-apple-diskimage',
       },
@@ -92,8 +91,7 @@ const makeGitHubReleaseResponse = () => [
       },
       {
         name: 'AionUi-1.9.22-linux-amd64.deb',
-        browser_download_url:
-          'https://github.com/hccnm/AionUi/releases/download/v1.9.22/AionUi-1.9.22-linux-amd64.deb',
+        browser_download_url: 'https://github.com/hccnm/AionUi/releases/download/v1.9.22/AionUi-1.9.22-linux-amd64.deb',
         size: 789,
       },
     ],
