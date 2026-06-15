@@ -215,3 +215,6 @@ graphify-out/
 .graphify_python
 
 .snow/
+
+# Local AI tool config
+.agents/
