@@ -254,7 +254,7 @@ jobs:
           CLAUDE_SDK_VERSION="$(node -p "require('./node_modules/@anthropic-ai/claude-agent-sdk/package.json').version")"
           CLAUDE_SDK_PLATFORM_PACKAGE="@anthropic-ai/claude-agent-sdk-${npm_config_platform}-${npm_config_arch}"
           echo "Installing ${CLAUDE_SDK_PLATFORM_PACKAGE}@${CLAUDE_SDK_VERSION}"
-          npm install --no-save "${CLAUDE_SDK_PLATFORM_PACKAGE}@${CLAUDE_SDK_VERSION}"
+          npm install --no-save --force "${CLAUDE_SDK_PLATFORM_PACKAGE}@${CLAUDE_SDK_VERSION}"
           npm run build
 
       - name: Use custom Claude ACP for managed bundle
