@@ -112,7 +112,7 @@ echo "==> Writing architecture-specific updater metadata ..."
 echo "==> Validating required metadata ..."
 
 MISSING=0
-for required in latest.yml latest-mac.yml latest-linux.yml latest-linux-arm64.yml; do
+for required in latest.yml latest-mac.yml latest-arm64-mac.yml; do
   if [ ! -f "$OUTPUT_DIR/$required" ]; then
     echo "::error::Missing required updater metadata: $required"
     MISSING=1
@@ -128,8 +128,6 @@ VERSION="${MOCK_VERSION:-$(node -p "require('./package.json').version")}"
 WEB_PLATFORMS=(
   "darwin-arm64"
   "darwin-x86_64"
-  "linux-arm64"
-  "linux-x86_64"
   "win-x86_64"
 )
 
@@ -144,11 +142,6 @@ for plat in "${WEB_PLATFORMS[@]}"; do
     MISSING=1
   fi
 done
-
-if [ ! -f "$OUTPUT_DIR/install-web.sh" ]; then
-  echo "::error::Missing install-web.sh"
-  MISSING=1
-fi
 
 if [ "$MISSING" -ne 0 ]; then
   exit 1
