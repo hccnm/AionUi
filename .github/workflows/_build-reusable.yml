@@ -242,6 +242,14 @@ jobs:
         shell: bash
         run: |
           cd claude-agent-acp
+          case "${{ matrix.platform }}" in
+            macos-*) export npm_config_platform=darwin ;;
+            windows-*) export npm_config_platform=win32 ;;
+            linux-*) export npm_config_platform=linux ;;
+            *) echo "Unsupported platform: ${{ matrix.platform }}" >&2; exit 1 ;;
+          esac
+          export npm_config_arch="${{ matrix.arch }}"
+          echo "Installing Claude ACP dependencies for ${npm_config_platform}-${npm_config_arch}"
           npm ci
           npm run build
 
