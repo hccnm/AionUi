@@ -261,14 +261,12 @@ describe('useAcpMessage', () => {
   it('retries slash command fetch once when warmup returns an empty command list', async () => {
     vi.useFakeTimers();
     vi.mocked(getConversationOrNull).mockResolvedValue(null);
-    getSlashCommandsInvokeMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          name: 'execute-order-test-cases',
-          description: 'Run order test workflow',
-        },
-      ]);
+    getSlashCommandsInvokeMock.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        name: 'execute-order-test-cases',
+        description: 'Run order test workflow',
+      },
+    ]);
 
     const { result } = renderHook(() => useAcpMessage('conv-1'));
 

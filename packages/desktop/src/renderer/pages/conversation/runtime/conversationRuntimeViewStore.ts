@@ -142,7 +142,7 @@ const viewFromRuntimeSummary = (
     hydrated: true,
     localSubmitting: pendingLocalSend,
     localStopping,
-    startedAt: isProcessing ? previous.startedAt ?? Date.now() : null,
+    startedAt: isProcessing ? (previous.startedAt ?? Date.now()) : null,
   };
 };
 

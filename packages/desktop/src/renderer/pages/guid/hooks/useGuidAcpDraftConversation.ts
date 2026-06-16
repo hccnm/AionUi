@@ -94,8 +94,7 @@ const buildAcpDraftParams = async (input: BuildDraftParamsInput): Promise<ICreat
   const { rules: preset_rules } = await input.resolvePresetRulesAndSkills(agentInfo);
   const presetEnabledSkillsDefault = input.resolveEnabledSkills(agentInfo);
   const enabled_skills = input.guidEnabledSkills ?? presetEnabledSkillsDefault;
-  const excludeBuiltinSkills =
-    input.guidDisabledBuiltinSkills ?? input.resolveDisabledBuiltinSkills(agentInfo);
+  const excludeBuiltinSkills = input.guidDisabledBuiltinSkills ?? input.resolveDisabledBuiltinSkills(agentInfo);
   const selectedMcpServerIdSet = new Set(input.selectedMcpServerIds ?? []);
   const selectedUserMcpServerIds = input.availableMcpServers
     .filter((server) => selectedMcpServerIdSet.has(server.id) && server.builtin !== true)
