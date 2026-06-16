@@ -17,6 +17,7 @@ export type ConversationRuntimeView = {
   localSubmitting: boolean;
   hydrated: boolean;
   localStopping: boolean;
+  startedAt: number | null;
 };
 
 export type ConversationRuntimeViewLogEvent =
@@ -85,6 +86,7 @@ export const createDefaultConversationRuntimeView = (conversation_id: string): C
   localSubmitting: false,
   hydrated: false,
   localStopping: false,
+  startedAt: null,
 });
 
 const summarizeView = (view: ConversationRuntimeView): Record<string, unknown> => ({
@@ -98,6 +100,7 @@ const summarizeView = (view: ConversationRuntimeView): Record<string, unknown> =
   localSubmitting: view.localSubmitting,
   hydrated: view.hydrated,
   localStopping: view.localStopping,
+  startedAt: view.startedAt,
 });
 
 const createLog = (
@@ -122,6 +125,7 @@ const viewFromRuntimeSummary = (
 ): ConversationRuntimeView => {
   const pendingLocalSend = metadata.pendingLocalSendSeq !== null && options.preservePendingLocalSend !== false;
   const activeTurnId = runtime.turn_id ?? null;
+  const isProcessing = pendingLocalSend || runtime.is_processing;
   const localStopping =
     metadata.pendingStopTurnId !== null &&
     metadata.pendingStopTurnId === activeTurnId &&
@@ -131,13 +135,14 @@ const viewFromRuntimeSummary = (
     ...previous,
     activeTurnId,
     state: pendingLocalSend && runtime.state === 'idle' ? 'starting' : runtime.state,
-    isProcessing: pendingLocalSend || runtime.is_processing,
+    isProcessing,
     canSendMessage: !pendingLocalSend && runtime.can_send_message,
     pendingConfirmations: runtime.pending_confirmations,
     hasBackendRuntime: true,
     hydrated: true,
     localSubmitting: pendingLocalSend,
     localStopping,
+    startedAt: isProcessing ? previous.startedAt ?? Date.now() : null,
   };
 };
 
@@ -244,6 +249,7 @@ export const localSendStartedConversationRuntimeView = (
     canSendMessage: false,
     localSubmitting: true,
     hydrated: true,
+    startedAt: base.startedAt ?? Date.now(),
   };
   return withLogs(view, [createLog('info', 'local_send_started', view)]);
 };
@@ -304,6 +310,7 @@ export const localSendFailedConversationRuntimeView = (
     canSendMessage: true,
     localSubmitting: false,
     hydrated: true,
+    startedAt: null,
   };
   return withLogs(view, [createLog('info', 'local_send_failed', view, { reason })]);
 };

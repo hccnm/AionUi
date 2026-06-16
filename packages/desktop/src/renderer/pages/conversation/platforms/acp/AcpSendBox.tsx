@@ -619,7 +619,11 @@ Please check your local CLI tool authentication status`,
         onRemove={remove}
         onClear={clear}
       />
-      <ThoughtDisplay running={aiProcessing && !hasThinkingMessage} onStop={handleStop} />
+      <ThoughtDisplay
+        running={aiProcessing && !hasThinkingMessage}
+        onStop={handleStop}
+        startedAt={runtimeView.view.startedAt}
+      />
 
       <SendBox
         onMobilePlusClick={isMobile ? () => setIsMobileSheetOpen(true) : undefined}

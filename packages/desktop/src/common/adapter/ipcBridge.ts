@@ -131,6 +131,15 @@ export const assistants = {
 // Conversation — REST + WS
 // ---------------------------------------------------------------------------
 
+type ConversationUpdateParams = {
+  id: string;
+  updates: Partial<Omit<TChatConversation, 'extra'>> & {
+    extra?: Partial<TChatConversation['extra']>;
+    model?: TProviderWithModel;
+  };
+  merge_extra?: boolean;
+};
+
 export const conversation = {
   create: withResponseMap(
     httpPost<TChatConversation, ICreateConversationParams>('/api/conversations', (p) => {
@@ -183,7 +192,7 @@ export const conversation = {
     (list) => list.map(fromApiConversation)
   ),
   remove: httpDelete<boolean, { id: string }>((p) => `/api/conversations/${p.id}`),
-  update: httpPatch<boolean, { id: string; updates: Partial<TChatConversation>; merge_extra?: boolean }>(
+  update: httpPatch<boolean, ConversationUpdateParams>(
     (p) => `/api/conversations/${p.id}`,
     (p) => {
       const updates = p.updates as Record<string, unknown>;
@@ -1451,6 +1460,8 @@ export interface ICreateConversationParams {
     remote_agent_id?: string;
     extra_skill_paths?: string[];
     team_id?: string;
+    /** Hidden Guid-page draft used to prewarm ACP capabilities before first send. */
+    guid_draft?: boolean;
   };
 }
 

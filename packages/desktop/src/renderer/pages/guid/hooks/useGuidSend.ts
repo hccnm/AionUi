@@ -16,6 +16,7 @@ import { type TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
 import { getConversationCreateErrorMessage } from '@/renderer/pages/conversation/utils/conversationCreateError';
 import type { AcpModelInfo, AvailableAgent, EffectiveAgentInfo } from '../types';
+import type { GuidAcpDraftConversation } from './useGuidAcpDraftConversation';
 
 export type GuidSendDeps = {
   // Input state
@@ -58,6 +59,7 @@ export type GuidSendDeps = {
   selectedMcpServerIds: string[] | undefined;
   currentEffectiveAgentInfo: EffectiveAgentInfo;
   isGoogleAuth: boolean;
+  acpDraftConversation?: GuidAcpDraftConversation;
 
   // Mention state reset
   setMentionOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -267,8 +269,12 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       });
 
       try {
-        const conversation = await ipcBridge.conversation.create.invoke(agentConversationParams);
-        if (!conversation || !conversation.id) {
+        // The Guid ACP draft is only a hidden prewarm target for slash command
+        // discovery. Reusing it for the real first turn changes the normal
+        // conversation startup ordering and can race runtime hydration. Keep
+        // the actual send path identical to a regular newly-created ACP chat.
+        const conversationId = (await ipcBridge.conversation.create.invoke(agentConversationParams))?.id;
+        if (!conversationId) {
           console.error('Failed to create ACP conversation - conversation object is null or missing id');
           return;
         }
@@ -283,9 +289,9 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           input,
           files: files.length > 0 ? files : undefined,
         };
-        sessionStorage.setItem(`acp_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
+        sessionStorage.setItem(`acp_initial_message_${conversationId}`, JSON.stringify(initialMessage));
 
-        await navigate(`/conversation/${conversation.id}`);
+        await navigate(`/conversation/${conversationId}`);
       } catch (error: unknown) {
         console.error('Failed to create ACP conversation:', error);
         throw error;
@@ -309,6 +315,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     resolveEnabledSkills,
     resolveDisabledBuiltinSkills,
     guidDisabledBuiltinSkills,
+    guidEnabledSkills,
     availableMcpServers,
     selectedMcpServerIds,
     navigate,

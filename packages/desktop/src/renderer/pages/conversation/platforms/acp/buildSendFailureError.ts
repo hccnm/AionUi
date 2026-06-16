@@ -14,6 +14,18 @@ const isConversationBusyError = (error: unknown): boolean => {
   return error.backendMessage.toLowerCase().includes('already processing');
 };
 
+const isProviderCapacityError = (error: unknown): boolean => {
+  if (!isBackendHttpError(error)) return false;
+  const text = `${error.backendMessage} ${JSON.stringify(error.details ?? '')}`.toLowerCase();
+  return (
+    text.includes('529') ||
+    text.includes('访问量过大') ||
+    text.includes('try again in a moment') ||
+    text.includes('server-side issue') ||
+    text.includes('temporarily unavailable')
+  );
+};
+
 export const buildSendFailureError = (error: unknown, message: string): AgentStreamErrorInfo => {
   const workspacePathErrorCode = normalizeWorkspacePathErrorCode(error);
   if (workspacePathErrorCode) {
@@ -26,6 +38,18 @@ export const buildSendFailureError = (error: unknown, message: string): AgentStr
       ...(workspacePath ? { workspacePath } : {}),
       retryable: false,
       feedback_recommended: false,
+    };
+  }
+
+  if (isProviderCapacityError(error)) {
+    return {
+      message,
+      code: 'USER_LLM_PROVIDER_RATE_LIMITED',
+      ownership: 'user_llm_provider',
+      detail: message,
+      retryable: true,
+      feedback_recommended: false,
+      resolution: { kind: 'retry' },
     };
   }
 

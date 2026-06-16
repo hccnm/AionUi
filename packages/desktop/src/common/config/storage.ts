@@ -283,6 +283,8 @@ export type TChatConversation =
           pending_config_options?: Record<string, string>;
           /** Legacy marker for pre-provider-probe health-check conversations */
           is_health_check?: boolean;
+          /** Hidden Guid-page draft used to prewarm ACP capabilities before first send. */
+          guid_draft?: boolean;
           /** Cron job ID that spawned this conversation */
           cron_job_id?: string;
         }

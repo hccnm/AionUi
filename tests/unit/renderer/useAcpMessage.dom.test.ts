@@ -5,18 +5,20 @@
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAcpMessage } from '@/renderer/pages/conversation/platforms/acp/useAcpMessage';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 
-const { addOrUpdateMessageMock, responseStreamOnMock, responseStreamHandlerRef } = vi.hoisted(() => ({
-  addOrUpdateMessageMock: vi.fn(),
-  responseStreamOnMock: vi.fn(),
-  responseStreamHandlerRef: {
-    current: undefined as ((message: IResponseMessage) => void) | undefined,
-  },
-}));
+const { addOrUpdateMessageMock, getSlashCommandsInvokeMock, responseStreamOnMock, responseStreamHandlerRef } =
+  vi.hoisted(() => ({
+    addOrUpdateMessageMock: vi.fn(),
+    getSlashCommandsInvokeMock: vi.fn().mockResolvedValue([]),
+    responseStreamOnMock: vi.fn(),
+    responseStreamHandlerRef: {
+      current: undefined as ((message: IResponseMessage) => void) | undefined,
+    },
+  }));
 
 vi.mock('@/renderer/pages/conversation/Messages/hooks', () => ({
   useAddOrUpdateMessage: () => addOrUpdateMessageMock,
@@ -41,7 +43,7 @@ vi.mock('@/common', () => ({
         invoke: vi.fn().mockResolvedValue(undefined),
       },
       getSlashCommands: {
-        invoke: vi.fn().mockResolvedValue([]),
+        invoke: getSlashCommandsInvokeMock,
       },
     },
   },
@@ -50,7 +52,13 @@ vi.mock('@/common', () => ({
 describe('useAcpMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
+    getSlashCommandsInvokeMock.mockResolvedValue([]);
     responseStreamHandlerRef.current = undefined;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('completes hydration when the conversation lookup fails', async () => {
@@ -217,6 +225,70 @@ describe('useAcpMessage', () => {
         },
       ]);
     });
+  });
+
+  it('refreshes slash commands when slash_commands_updated arrives', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+    getSlashCommandsInvokeMock.mockResolvedValue([
+      {
+        name: 'execute-order-test-cases',
+        description: 'Run order test workflow',
+      },
+    ]);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1', { skipWarmup: true }));
+
+    act(() => {
+      responseStreamHandlerRef.current?.({
+        type: 'slash_commands_updated',
+        data: {},
+        msg_id: 'cmd-changed-1',
+        conversation_id: 'conv-1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.slashCommands).toEqual([
+        expect.objectContaining({
+          name: 'execute-order-test-cases',
+          source: 'acp',
+        }),
+      ]);
+    });
+    expect(getSlashCommandsInvokeMock).toHaveBeenCalledWith({ conversation_id: 'conv-1' });
+  });
+
+  it('retries slash command fetch once when warmup returns an empty command list', async () => {
+    vi.useFakeTimers();
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+    getSlashCommandsInvokeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          name: 'execute-order-test-cases',
+          description: 'Run order test workflow',
+        },
+      ]);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getSlashCommandsInvokeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+      await Promise.resolve();
+    });
+
+    expect(result.current.slashCommands).toEqual([
+      expect.objectContaining({
+        name: 'execute-order-test-cases',
+        source: 'acp',
+      }),
+    ]);
   });
 
   it('tracks current ACP mode from acp_mode_info stream updates', async () => {

@@ -43,6 +43,20 @@ describe('buildSendFailureError', () => {
     expect(result.retryable).toBe(true);
   });
 
+  it('classifies provider 529 capacity errors as provider rate limit', () => {
+    const message =
+      'API Error: 529 [1305][该模型当前访问量过大，请您稍后再试]. This is a server-side issue, usually temporary — try again in a moment.';
+    const err = httpError(502, 'BAD_GATEWAY', message);
+
+    const result = buildSendFailureError(err, message);
+
+    expect(result.code).toBe('USER_LLM_PROVIDER_RATE_LIMITED');
+    expect(result.ownership).toBe('user_llm_provider');
+    expect(result.retryable).toBe(true);
+    expect(result.feedback_recommended).toBe(false);
+    expect(result.resolution).toEqual({ kind: 'retry' });
+  });
+
   it('preserves workspace-path validation code as a structured non-retryable error', () => {
     const err = httpError(
       400,

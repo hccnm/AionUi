@@ -21,11 +21,14 @@ import MentionDropdown, { MentionSelectorBadge } from './components/MentionDropd
 import QuickActionButtons from './components/QuickActionButtons';
 import FeedbackReportModal from '@/renderer/components/settings/SettingsModal/contents/FeedbackReportModal';
 import { useGuidAgentSelection } from './hooks/useGuidAgentSelection';
+import { useGuidAcpDraftConversation } from './hooks/useGuidAcpDraftConversation';
 import { useGuidInput } from './hooks/useGuidInput';
 import { useGuidMention } from './hooks/useGuidMention';
 import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
+import SlashCommandMenu, { type SlashCommandMenuItem } from '@/renderer/components/chat/SlashCommandMenu';
+import { matchSlashQuery, useSlashCommandController } from '@/renderer/hooks/chat/useSlashCommandController';
 import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
 import { resolveAgentLogo } from '@/renderer/utils/model/agentLogo';
 import { Button, ConfigProvider, Dropdown, Menu, Message } from '@arco-design/web-react';
@@ -148,6 +151,27 @@ const GuidPage: React.FC = () => {
     selectedAgentInfo: agentSelection.selectedAgentInfo,
   });
 
+  const acpDraftConversation = useGuidAcpDraftConversation({
+    dir: guidInput.dir,
+    selectedAgent: agentSelection.selectedAgent,
+    selectedAgentKey: agentSelection.selectedAgentKey,
+    selectedAgentInfo: agentSelection.selectedAgentInfo,
+    is_presetAgent: agentSelection.is_presetAgent,
+    selectedMode: agentSelection.selectedMode,
+    selectedAcpModel: agentSelection.selectedAcpModel,
+    currentAcpCachedModelInfo: agentSelection.currentAcpCachedModelInfo,
+    current_model: modelSelection.current_model,
+    findAgentByKey: agentSelection.findAgentByKey,
+    getEffectiveAgentType: agentSelection.getEffectiveAgentType,
+    resolvePresetRulesAndSkills: agentSelection.resolvePresetRulesAndSkills,
+    resolveEnabledSkills: agentSelection.resolveEnabledSkills,
+    resolveDisabledBuiltinSkills: agentSelection.resolveDisabledBuiltinSkills,
+    guidDisabledBuiltinSkills,
+    guidEnabledSkills,
+    availableMcpServers,
+    selectedMcpServerIds: guidSelectedMcpServerIds,
+  });
+
   const send = useGuidSend({
     // Input state
     input: guidInput.input,
@@ -181,6 +205,7 @@ const GuidPage: React.FC = () => {
     selectedMcpServerIds: guidSelectedMcpServerIds,
     currentEffectiveAgentInfo: agentSelection.currentEffectiveAgentInfo,
     isGoogleAuth: modelSelection.isGoogleAuth,
+    acpDraftConversation,
 
     // Mention state reset
     setMentionOpen: mention.setMentionOpen,
@@ -193,10 +218,62 @@ const GuidPage: React.FC = () => {
     t,
   });
 
+  const slashController = useSlashCommandController({
+    input: guidInput.input,
+    commands: acpDraftConversation.slashCommands,
+    onSelectTemplate: (name) => {
+      guidInput.setInput(`/${name} `);
+      mention.setMentionOpen(false);
+      mention.setMentionQuery(null);
+      mention.setMentionSelectorOpen(false);
+    },
+  });
+
+  const slashCommandMenuNode = useMemo(() => {
+    const slashQuery = matchSlashQuery(guidInput.input);
+    const shouldShowLoadingMenu =
+      slashQuery !== null && acpDraftConversation.loading && acpDraftConversation.slashCommands.length === 0;
+    if (!slashController.isOpen && !shouldShowLoadingMenu) {
+      return null;
+    }
+
+    const items: SlashCommandMenuItem[] = slashController.filteredCommands.map((command) => ({
+      key: command.name,
+      label: `/${command.name}`,
+      description: command.description,
+      badge: command.source === 'acp' ? 'ACP' : undefined,
+    }));
+
+    return (
+      <SlashCommandMenu
+        title={t('messages.slash.title')}
+        hint={t('messages.slash.hint')}
+        items={items}
+        activeIndex={slashController.activeIndex}
+        loading={shouldShowLoadingMenu}
+        loadingText={t('common.loading', { defaultValue: 'Loading...' })}
+        emptyText={t('messages.slash.empty')}
+        onHoverItem={slashController.setActiveIndex}
+        onSelectItem={(item) => {
+          const index = slashController.filteredCommands.findIndex((command) => command.name === item.key);
+          if (index >= 0) {
+            slashController.onSelectByIndex(index);
+          }
+        }}
+      />
+    );
+  }, [acpDraftConversation.loading, acpDraftConversation.slashCommands.length, guidInput.input, slashController, t]);
+
   // --- Coordinated handlers (depend on multiple hooks) ---
   const handleInputChange = useCallback(
     (value: string) => {
       guidInput.setInput(value);
+      if (matchSlashQuery(value) !== null) {
+        mention.setMentionOpen(false);
+        mention.setMentionQuery(null);
+        mention.setMentionSelectorOpen(false);
+        return;
+      }
       const match = value.match(mention.mentionMatchRegex);
       // 首页不根据输入 @ 呼起 mention 列表，占位符里的 @agent 仅为提示，选 agent 用顶部栏或下拉手动选
       if (match) {
@@ -207,11 +284,20 @@ const GuidPage: React.FC = () => {
         mention.setMentionOpen(false);
       }
     },
-    [mention.mentionMatchRegex, guidInput.setInput, mention.setMentionQuery, mention.setMentionOpen]
+    [
+      mention.mentionMatchRegex,
+      guidInput.setInput,
+      mention.setMentionQuery,
+      mention.setMentionOpen,
+      mention.setMentionSelectorOpen,
+    ]
   );
 
   const handleInputKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
+      if (slashController.onKeyDown(event)) {
+        return;
+      }
       if (
         (mention.mentionOpen || mention.mentionSelectorOpen) &&
         (event.key === 'ArrowDown' || event.key === 'ArrowUp')
@@ -282,7 +368,7 @@ const GuidPage: React.FC = () => {
         send.sendMessageHandler();
       }
     },
-    [mention, guidInput.input, send.sendMessageHandler]
+    [slashController, mention, guidInput.input, send.sendMessageHandler]
   );
 
   const handleSelectAgentFromPillBar = useCallback(
@@ -782,6 +868,7 @@ const GuidPage: React.FC = () => {
               />
             }
             mentionDropdown={mentionDropdownNode}
+            slashCommandMenu={slashCommandMenuNode}
             files={guidInput.files}
             onRemoveFile={guidInput.handleRemoveFile}
             actionRow={actionRowNode}

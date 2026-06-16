@@ -19,6 +19,8 @@ import { warmupConversation } from '@/renderer/pages/conversation/utils/warmupCo
 import type { ThoughtData } from '@/renderer/components/chat/ThoughtDisplay';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+type AcpSlashCommandSource = Parameters<typeof mapAcpCommandsToSlashCommands>[0];
+
 export type AcpModeInfo = {
   current_mode_id?: string;
   available_modes?: Array<{
@@ -87,6 +89,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
   // Guard: after finish arrives, prevent auto-recover from setting running=true
   // until a new 'start' signal arrives for the next turn
   const turnFinishedRef = useRef(false);
+  const slashCommandRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track whether current turn has a thinking message in the conversation
   const hasThinkingMessageRef = useRef(false);
@@ -140,11 +143,52 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     };
   }, []);
 
+  const updateSlashCommands = useCallback((commands: AcpSlashCommandSource, source: string) => {
+    console.debug('[ACP] slash commands updated', {
+      source,
+      count: commands.length,
+    });
+    setSlashCommands(mapAcpCommandsToSlashCommands(commands));
+  }, []);
+
+  const fetchSlashCommands = useCallback(
+    (source = 'manual-http', retryOnEmpty = false) => {
+      if (slashCommandRetryTimerRef.current) {
+        clearTimeout(slashCommandRetryTimerRef.current);
+        slashCommandRetryTimerRef.current = null;
+      }
+
+      void ipcBridge.conversation.getSlashCommands
+        .invoke({ conversation_id })
+        .then((result) => {
+          if (!result || !Array.isArray(result) || result.length === 0) {
+            console.debug('[ACP] slash commands empty', { source });
+            if (retryOnEmpty) {
+              slashCommandRetryTimerRef.current = setTimeout(() => {
+                slashCommandRetryTimerRef.current = null;
+                fetchSlashCommands('retry-http', false);
+              }, 350);
+            }
+            return;
+          }
+          updateSlashCommands(result, source);
+        })
+        .catch((error) => {
+          console.debug('[ACP] slash commands fetch failed', { source, error });
+        });
+    },
+    [conversation_id, updateSlashCommands]
+  );
+
   // Clean up throttle timer
   useEffect(() => {
     return () => {
       if (thoughtThrottleRef.current.timer) {
         clearTimeout(thoughtThrottleRef.current.timer);
+      }
+      if (slashCommandRetryTimerRef.current) {
+        clearTimeout(slashCommandRetryTimerRef.current);
+        slashCommandRetryTimerRef.current = null;
       }
     };
   }, []);
@@ -416,14 +460,15 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
         }
         case 'slash_commands_updated':
           // Slash commands became available (often during bootstrap when
-          // agent_status events are suppressed). Update acpStatus so
-          // useSlashCommands re-fetches.
+          // agent_status events are suppressed). Fetch immediately; the
+          // stream event itself intentionally only says "changed".
           setAcpStatus((prev) => prev ?? 'session_active');
+          fetchSlashCommands('stream-changed', true);
           break;
         case 'available_commands': {
           const cmdData = message.data as { commands?: AvailableCommand[] };
           if (cmdData?.commands && Array.isArray(cmdData.commands)) {
-            setSlashCommands(mapAcpCommandsToSlashCommands(cmdData.commands));
+            updateSlashCommands(cmdData.commands, 'stream');
           }
           break;
         }
@@ -490,7 +535,9 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
       conversation_id,
       addOrUpdateMessage,
       completeActiveThinking,
+      fetchSlashCommands,
       throttledSetThought,
+      updateSlashCommands,
       setThought,
       setRunning,
       setAiProcessing,
@@ -594,18 +641,13 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     void warmupConversation(conversation_id)
       .then(() => {
         if (cancelled) return;
-        return ipcBridge.conversation.getSlashCommands.invoke({ conversation_id });
-      })
-      .then((result) => {
-        if (cancelled) return;
-        if (!result || !Array.isArray(result) || result.length === 0) return;
-        setSlashCommands(mapAcpCommandsToSlashCommands(result));
+        fetchSlashCommands('warmup-http', true);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [conversation_id, options?.skipWarmup]);
+  }, [conversation_id, fetchSlashCommands, options?.skipWarmup]);
 
   const resetState = useCallback(() => {
     turnFinishedRef.current = true;
@@ -619,16 +661,6 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     activeThinkingRef.current = null;
     setHasThinkingMessage(false);
   }, []);
-
-  const fetchSlashCommands = useCallback(() => {
-    void ipcBridge.conversation.getSlashCommands
-      .invoke({ conversation_id })
-      .then((result) => {
-        if (!result || !Array.isArray(result) || result.length === 0) return;
-        setSlashCommands(mapAcpCommandsToSlashCommands(result));
-      })
-      .catch(() => {});
-  }, [conversation_id]);
 
   return {
     thought,

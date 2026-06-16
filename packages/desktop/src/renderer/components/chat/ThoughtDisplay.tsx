@@ -19,6 +19,7 @@ interface ThoughtDisplayProps {
   style?: 'default' | 'compact';
   running?: boolean;
   onStop?: () => void;
+  startedAt?: number | null;
 }
 
 // Background gradient constants
@@ -30,6 +31,7 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
   style = 'default',
   running = false,
   onStop: _onStop,
+  startedAt,
 }) => {
   const { theme } = useThemeContext();
   const { t } = useTranslation();
@@ -47,8 +49,11 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
     return `${minutes}${mUnit} ${remainingSeconds}${sUnit}`;
   };
 
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const startTimeRef = useRef<number>(Date.now());
+  const getStartTime = () => startedAt ?? Date.now();
+  const [elapsedTime, setElapsedTime] = useState(() =>
+    running || thought?.subject ? Math.max(0, Math.floor((Date.now() - getStartTime()) / 1000)) : 0
+  );
+  const startTimeRef = useRef<number>(getStartTime());
 
   // Timer for elapsed time
   useEffect(() => {
@@ -57,8 +62,8 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
       return;
     }
 
-    startTimeRef.current = Date.now();
-    setElapsedTime(0);
+    startTimeRef.current = getStartTime();
+    setElapsedTime(Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000)));
 
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -66,7 +71,7 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [running, thought?.subject]);
+  }, [running, thought?.subject, startedAt]);
 
   // Calculate final style based on theme and style prop
   const containerStyle = useMemo(() => {
