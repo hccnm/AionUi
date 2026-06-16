@@ -237,7 +237,6 @@ jobs:
           repository: hccnm/claude-agent-acp
           ref: main
           path: claude-agent-acp
-          token: ${{ secrets.GH_TOKEN }}
 
       - name: Build custom Claude ACP
         shell: bash
