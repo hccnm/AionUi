@@ -5,8 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
-import { isErrorTipMessage, transformMessage } from '@/common/chat/chatLib';
-import type { AvailableCommand } from '@/common/chat/chatLib';
+import { isErrorTipMessage, isProviderRetryTipMessage, transformMessage } from '@/common/chat/chatLib';
+import type { AvailableCommand, ProviderRetryState } from '@/common/chat/chatLib';
 import { mapAcpCommandsToSlashCommands } from '@/common/chat/slash/acpMapping';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
@@ -57,6 +57,7 @@ export type UseAcpMessageReturn = {
   tokenUsage: TokenUsageData | null;
   context_limit: number;
   hasThinkingMessage: boolean;
+  retryState: ProviderRetryState | null;
   slashCommands: SlashCommandItem[];
   fetchSlashCommands: () => void;
   modeInfo: AcpModeInfo | null;
@@ -78,10 +79,12 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
   const [context_limit, setContextLimit] = useState<number>(0);
   const [slashCommands, setSlashCommands] = useState<SlashCommandItem[]>([]);
   const [modeInfo, setModeInfo] = useState<AcpModeInfo | null>(null);
+  const [retryState, setRetryState] = useState<ProviderRetryState | null>(null);
 
   // Use refs to sync state for immediate access in event handlers
   const runningRef = useRef(running);
   const aiProcessingRef = useRef(aiProcessing);
+  const retryStateRef = useRef<ProviderRetryState | null>(null);
 
   // Track whether current turn has content output
   const hasContentInTurnRef = useRef(false);
@@ -246,10 +249,34 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
         hasThinkingMessageRef.current = false;
         activeThinkingRef.current = null;
         setHasThinkingMessage(false);
+        retryStateRef.current = null;
+        setRetryState(null);
         const transformedMessage = transformMessage(message);
         if (transformedMessage) {
           addOrUpdateMessage(transformedMessage);
         }
+        return;
+      }
+
+      if (isProviderRetryTipMessage(message)) {
+        const params = (message.data as { params?: Record<string, unknown> }).params ?? {};
+        const attempt = typeof params.attempt === 'number' ? params.attempt : 1;
+        const maxAttempts =
+          typeof params.max_attempts === 'number'
+            ? params.max_attempts
+            : typeof params.maxAttempts === 'number'
+              ? params.maxAttempts
+              : 2;
+        const reason = typeof params.reason === 'string' ? params.reason : undefined;
+        const next: ProviderRetryState = { attempt, maxAttempts, reason };
+        retryStateRef.current = next;
+        setRetryState(next);
+        // Keep the status bar visible while retrying
+        if (!runningRef.current && !turnFinishedRef.current) {
+          setRunning(true);
+          runningRef.current = true;
+        }
+        // Not a chat bubble — drives the status bar instead
         return;
       }
 
@@ -340,6 +367,8 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
             hasThinkingMessageRef.current = false;
             activeThinkingRef.current = null;
             setHasThinkingMessage(false);
+            retryStateRef.current = null;
+            setRetryState(null);
             // Log request completion
             if (requestTraceRef.current) {
               const duration = Date.now() - requestTraceRef.current.startTime;
@@ -359,6 +388,8 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
             hasContentInTurnRef.current = true;
             setAiProcessing(false);
             aiProcessingRef.current = false;
+            retryStateRef.current = null;
+            setRetryState(null);
           }
           // Auto-recover running state only if turn hasn't finished
           if (!runningRef.current && !turnFinishedRef.current) {
@@ -660,6 +691,8 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     hasThinkingMessageRef.current = false;
     activeThinkingRef.current = null;
     setHasThinkingMessage(false);
+    retryStateRef.current = null;
+    setRetryState(null);
   }, []);
 
   return {
@@ -674,6 +707,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     tokenUsage,
     context_limit,
     hasThinkingMessage,
+    retryState,
     slashCommands,
     fetchSlashCommands,
     modeInfo,

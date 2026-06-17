@@ -99,8 +99,16 @@ const AcpSendBox: React.FC<{
   workspacePath?: string;
   messageState: UseAcpMessageReturn;
 }> = ({ conversation_id, backend, session_mode, agent_name, workspacePath, messageState }) => {
-  const { aiProcessing, setAiProcessing, resetState, hasThinkingMessage, slashCommands, fetchSlashCommands, modeInfo } =
-    messageState;
+  const {
+    aiProcessing,
+    setAiProcessing,
+    resetState,
+    hasThinkingMessage,
+    retryState,
+    slashCommands,
+    fetchSlashCommands,
+    modeInfo,
+  } = messageState;
   const { t } = useTranslation();
   const teamPermission = useTeamPermission();
   // In team mode, all agents show the permission mode selector (members don't propagate)
@@ -623,6 +631,7 @@ Please check your local CLI tool authentication status`,
         running={aiProcessing && !hasThinkingMessage}
         onStop={handleStop}
         startedAt={runtimeView.view.startedAt}
+        retryState={retryState}
       />
 
       <SendBox

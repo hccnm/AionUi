@@ -9,6 +9,8 @@ import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { useThemeContext } from '@/renderer/hooks/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
 
+import type { ProviderRetryState } from '@/common/chat/chatLib';
+
 export interface ThoughtData {
   subject: string;
   description: string;
@@ -20,6 +22,7 @@ interface ThoughtDisplayProps {
   running?: boolean;
   onStop?: () => void;
   startedAt?: number | null;
+  retryState?: ProviderRetryState | null;
 }
 
 // Background gradient constants
@@ -32,6 +35,7 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
   running = false,
   onStop: _onStop,
   startedAt,
+  retryState,
 }) => {
   const { theme } = useThemeContext();
   const { t } = useTranslation();
@@ -98,6 +102,7 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
 
   // Loading-only mode: running without thought data (used by ACP when thinking is inline)
   if (running && !thought?.subject) {
+    const showRetry = !!retryState;
     return (
       <div
         className='relative z-1 mb--20px pb-30px px-10px py-10px rd-t-20px text-14px lh-20px text-t-primary flex items-center gap-8px'
@@ -105,7 +110,12 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
       >
         <Spin size={14} />
         <span className='text-t-secondary'>
-          {t('conversation.chat.processing')}
+          {showRetry
+            ? t('conversation.chat.providerRetrying', {
+                attempt: retryState!.attempt,
+                max: retryState!.maxAttempts,
+              })
+            : t('conversation.chat.processing')}
           <span className='ml-8px opacity-60'>({formatElapsedTime(elapsedTime)})</span>
         </span>
       </div>

@@ -319,4 +319,48 @@ describe('useAcpMessage', () => {
       });
     });
   });
+
+  it('surfaces provider retry tips on the status bar without creating a chat bubble', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1', { skipWarmup: true }));
+
+    act(() => {
+      responseStreamHandlerRef.current?.({
+        type: 'tips',
+        data: {
+          content: 'Retrying (1/2)',
+          type: 'warning',
+          code: 'provider.retry',
+          params: { attempt: 1, max_attempts: 2, reason: 'connection reset' },
+        },
+        msg_id: 'msg-1',
+        conversation_id: 'conv-1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.retryState).toEqual({
+        attempt: 1,
+        maxAttempts: 2,
+        reason: 'connection reset',
+      });
+    });
+    // Retry tips drive the status bar, not a chat bubble
+    expect(addOrUpdateMessageMock).not.toHaveBeenCalled();
+
+    // First real content token clears the retry state
+    act(() => {
+      responseStreamHandlerRef.current?.({
+        type: 'text',
+        data: 'beta',
+        msg_id: 'msg-1',
+        conversation_id: 'conv-1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.retryState).toBeNull();
+    });
+  });
 });

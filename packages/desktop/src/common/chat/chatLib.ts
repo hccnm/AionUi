@@ -183,6 +183,23 @@ export const isErrorTipMessage = (message: IResponseMessage): boolean => {
   return tipData.type === 'error';
 };
 
+/// Provider network-retry status surfaced to the status bar (replaces generic "processing").
+export type ProviderRetryState = {
+  attempt: number;
+  maxAttempts: number;
+  reason?: string;
+};
+
+/// Detects a tips message emitted by the backend when the LLM provider is retrying
+/// after a retryable network/transport failure (code = "provider.retry").
+/// These tips must NOT be rendered as chat bubbles — they drive the status bar instead.
+export const isProviderRetryTipMessage = (message: IResponseMessage): boolean => {
+  if (message.type !== 'tips' || !message.data || typeof message.data !== 'object') {
+    return false;
+  }
+  return (message.data as { code?: unknown }).code === 'provider.retry';
+};
+
 export type IMessageToolCall = IMessage<
   'tool_call',
   {
