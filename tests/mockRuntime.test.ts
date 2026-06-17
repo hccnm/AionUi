@@ -9,14 +9,20 @@ describe('intercept mock runtime', () => {
   it('serves unauthenticated auth state before login and authenticated state after login', async () => {
     const beforeLogin = await __mockRuntime.handleMockApi('http://aionweb.mock/api/auth/user', { method: 'GET' });
     expect(beforeLogin).not.toBeNull();
-    expect(await beforeLogin!.json()).toEqual({ success: false });
+    expect(await beforeLogin!.json()).toEqual({ success: false, error: 'Unauthorized' });
 
-    await __mockRuntime.handleMockApi('http://aionweb.mock/login', {
+    const loginResponse = await __mockRuntime.handleMockApi('http://aionweb.mock/login', {
       method: 'POST',
       body: JSON.stringify({ username: 'demo' }),
     });
+    const loginJson = await loginResponse!.json();
 
-    const afterLogin = await __mockRuntime.handleMockApi('http://aionweb.mock/api/auth/user', { method: 'GET' });
+    const afterLogin = await __mockRuntime.handleMockApi('http://aionweb.mock/api/auth/user', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${loginJson.token}`,
+      },
+    });
     expect(await afterLogin!.json()).toEqual({
       success: true,
       user: {

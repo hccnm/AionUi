@@ -33,7 +33,8 @@ const deobfuscate = (text: string): string => {
 const LoginPage: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { status, login } = useAuth();
+  const { status, login, setupPassword } = useAuth();
+  const isSetupMode = status === 'setup_required';
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -65,8 +66,18 @@ const LoginPage: React.FC = () => {
   }, [i18n.language]);
 
   useEffect(() => {
+    if (isSetupMode) {
+      setUsername('');
+      setRememberMe(false);
+      localStorage.removeItem(REMEMBER_ME_KEY);
+      localStorage.removeItem(REMEMBERED_USERNAME_KEY);
+      localStorage.removeItem(REMEMBERED_PASSWORD_KEY);
+    }
+  }, [isSetupMode]);
+
+  useEffect(() => {
     const isRememberMe = localStorage.getItem(REMEMBER_ME_KEY) === 'true';
-    if (isRememberMe) {
+    if (!isSetupMode && isRememberMe) {
       const storedUsername = localStorage.getItem(REMEMBERED_USERNAME_KEY);
       const storedPassword = localStorage.getItem(REMEMBERED_PASSWORD_KEY);
       if (storedUsername) setUsername(deobfuscate(storedUsername));
@@ -74,7 +85,11 @@ const LoginPage: React.FC = () => {
       setRememberMe(true);
     }
     window.setTimeout(() => {
-      usernameRef.current?.focus();
+      if (isSetupMode) {
+        passwordRef.current?.focus();
+      } else {
+        usernameRef.current?.focus();
+      }
     }, 0);
 
     return () => {
@@ -82,7 +97,7 @@ const LoginPage: React.FC = () => {
         window.clearTimeout(messageTimer.current);
       }
     };
-  }, []);
+  }, [isSetupMode]);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -114,13 +129,33 @@ const LoginPage: React.FC = () => {
       event.preventDefault();
       const trimmedUsername = username.trim();
 
-      if (!trimmedUsername || !password) {
+      if ((!isSetupMode && !trimmedUsername) || !password) {
         showMessage({ type: 'error', text: t('login.errors.empty') });
         return;
       }
 
       setLoading(true);
       setMessage(null);
+
+      if (isSetupMode) {
+        const result = await setupPassword(password);
+
+        if (result.success) {
+          setPassword('');
+          showMessage({
+            type: 'success',
+            text: result.message ?? '密码已设置，请使用管理员账号登录。',
+          });
+        } else {
+          showMessage({
+            type: 'error',
+            text: result.message ?? t('login.errors.unknown'),
+          });
+        }
+
+        setLoading(false);
+        return;
+      }
 
       const result = await login({ username: trimmedUsername, password, remember: rememberMe });
 
@@ -163,7 +198,7 @@ const LoginPage: React.FC = () => {
 
       setLoading(false);
     },
-    [login, navigate, password, rememberMe, showMessage, t, username]
+    [isSetupMode, login, navigate, password, rememberMe, setupPassword, showMessage, t, username]
   );
 
   if (status === 'checking') {
@@ -184,43 +219,47 @@ const LoginPage: React.FC = () => {
             <img src={loginLogo} alt={t('login.brand')} />
           </div>
           <h1 className='login-page__title'>{t('login.brand')}</h1>
-          <p className='login-page__subtitle'>{t('login.subtitle')}</p>
+          <p className='login-page__subtitle'>
+            {isSetupMode ? '首次部署初始化，请先设置管理员密码。' : t('login.subtitle')}
+          </p>
         </div>
 
         <form className='login-page__form' onSubmit={handleSubmit}>
-          <div className='login-page__form-item'>
-            <label className='login-page__label' htmlFor='username'>
-              {t('login.username')}
-            </label>
-            <div className='login-page__input-wrapper'>
-              <svg
-                className='login-page__input-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                strokeWidth='2'
-                aria-hidden='true'
-              >
-                <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                <circle cx='12' cy='7' r='4' />
-              </svg>
-              <input
-                ref={usernameRef}
-                id='username'
-                name='username'
-                className='login-page__input'
-                placeholder={t('login.usernamePlaceholder')}
-                autoComplete='username'
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                aria-required='true'
-              />
+          {!isSetupMode && (
+            <div className='login-page__form-item'>
+              <label className='login-page__label' htmlFor='username'>
+                {t('login.username')}
+              </label>
+              <div className='login-page__input-wrapper'>
+                <svg
+                  className='login-page__input-icon'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  strokeWidth='2'
+                  aria-hidden='true'
+                >
+                  <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
+                  <circle cx='12' cy='7' r='4' />
+                </svg>
+                <input
+                  ref={usernameRef}
+                  id='username'
+                  name='username'
+                  className='login-page__input'
+                  placeholder={t('login.usernamePlaceholder')}
+                  autoComplete='username'
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  aria-required='true'
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className='login-page__form-item'>
             <label className='login-page__label' htmlFor='password'>
-              {t('login.password')}
+              {isSetupMode ? '管理员密码' : t('login.password')}
             </label>
             <div className='login-page__input-wrapper'>
               <svg
@@ -240,8 +279,8 @@ const LoginPage: React.FC = () => {
                 name='password'
                 type={passwordVisible ? 'text' : 'password'}
                 className='login-page__input'
-                placeholder={t('login.passwordPlaceholder')}
-                autoComplete='current-password'
+                placeholder={isSetupMode ? '请输入管理员初始密码（至少 8 位）' : t('login.passwordPlaceholder')}
+                autoComplete={isSetupMode ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 aria-required='true'
@@ -269,15 +308,17 @@ const LoginPage: React.FC = () => {
             </div>
           </div>
 
-          <div className='login-page__checkbox'>
-            <input
-              type='checkbox'
-              id='remember-me'
-              checked={rememberMe}
-              onChange={(event) => setRememberMe(event.target.checked)}
-            />
-            <label htmlFor='remember-me'>{t('login.rememberMe')}</label>
-          </div>
+          {!isSetupMode && (
+            <div className='login-page__checkbox'>
+              <input
+                type='checkbox'
+                id='remember-me'
+                checked={rememberMe}
+                onChange={(event) => setRememberMe(event.target.checked)}
+              />
+              <label htmlFor='remember-me'>{t('login.rememberMe')}</label>
+            </div>
+          )}
 
           <button type='submit' className='login-page__submit' disabled={loading}>
             {loading && (
@@ -295,7 +336,7 @@ const LoginPage: React.FC = () => {
                 />
               </svg>
             )}
-            <span>{loading ? t('login.submitting') : t('login.submit')}</span>
+            <span>{loading ? t('login.submitting') : isSetupMode ? '设置密码' : t('login.submit')}</span>
           </button>
 
           <div

@@ -1,4 +1,5 @@
-import { buildHeaders } from './csrf';
+import type { AuthSessionStore } from '../aionui/common/auth/session';
+import { fetchWithSaasAuth } from '../aionui/common/auth/http';
 import { resolveHttpUrl } from '../config/backend';
 
 type RequestOptions = {
@@ -7,7 +8,7 @@ type RequestOptions = {
   headers?: Record<string, string>;
   signal?: AbortSignal;
   backendBaseUrl?: string;
-  cookie?: string;
+  sessionStore?: AuthSessionStore;
   fetchImpl?: typeof fetch;
 };
 
@@ -33,15 +34,19 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const method = (options.method ?? 'GET').toUpperCase();
   const hasBody = options.body !== undefined;
   const baseHeaders = hasBody ? { 'Content-Type': 'application/json', ...(options.headers ?? {}) } : options.headers;
-  const headers = buildHeaders(method, baseHeaders, options.cookie);
-  const fetcher = options.fetchImpl ?? fetch;
-  const response = await fetcher(resolveHttpUrl(path, options.backendBaseUrl), {
-    method,
-    headers,
-    credentials: 'include',
-    body: hasBody ? JSON.stringify(options.body) : undefined,
-    signal: options.signal,
-  });
+  const response = await fetchWithSaasAuth(
+    resolveHttpUrl(path, options.backendBaseUrl),
+    {
+      method,
+      headers: baseHeaders,
+      body: hasBody ? JSON.stringify(options.body) : undefined,
+      signal: options.signal,
+    },
+    {
+      fetchImpl: options.fetchImpl,
+      sessionStore: options.sessionStore,
+    }
+  );
 
   if (!response.ok) {
     throw new ApiError(response.status, response.statusText, await readResponseBody(response));

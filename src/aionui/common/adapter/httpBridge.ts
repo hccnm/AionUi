@@ -6,6 +6,10 @@
  * so existing renderer code works without changes.
  */
 
+import { authSessionStore } from '@/common/auth/session';
+import { expireAuthSession, fetchWithSaasAuth, fetchWsToken as fetchAuthenticatedWsToken } from '@/common/auth/http';
+import { getBackendBaseUrl, resolveHttpUrl, resolveWsUrl } from '@web/config/backend';
+
 // ---------------------------------------------------------------------------
 // Base URL
 // ---------------------------------------------------------------------------
@@ -50,6 +54,10 @@ function isWebUiBrowserMode(): boolean {
 }
 
 export function getBaseUrl(): string {
+  const backendBaseUrl = getBackendBaseUrl();
+  if (backendBaseUrl) {
+    return backendBaseUrl;
+  }
   if (isWebUiBrowserMode()) {
     // Same-origin: calls like fetch(`${baseUrl}/api/foo`) resolve to `/api/foo`
     // on whatever host the page was served from.
@@ -59,11 +67,23 @@ export function getBaseUrl(): string {
 }
 
 function getWsUrl(): string {
+  const backendBaseUrl = getBackendBaseUrl();
+  if (backendBaseUrl) {
+    return resolveWsUrl(backendBaseUrl);
+  }
   if (isWebUiBrowserMode()) {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${proto}//${window.location.host}/ws`;
   }
   return `ws://127.0.0.1:${getBackendPort()}/ws`;
+}
+
+function getWsTokenUrl(): string {
+  const backendBaseUrl = getBackendBaseUrl();
+  if (backendBaseUrl) {
+    return resolveHttpUrl('/api/ws-token', backendBaseUrl);
+  }
+  return getWsUrl().replace(/^ws:/, 'http:').replace(/^wss:/, 'https:').replace(/\/ws$/, '/api/ws-token');
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +208,7 @@ export async function httpRequest<T>(
     body !== undefined ? JSON.stringify(redactForLog(body)).slice(0, 500) : '(no body)'
   );
 
-  const response = await fetch(url, {
+  const response = await fetchWithSaasAuth(url, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -337,10 +357,25 @@ const wsListeners = new Map<string, Set<WsCallback>>();
 let ws: WebSocket | null = null;
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let wsReconnectAttempt = 0;
+let wsShouldReconnect = true;
 
-function ensureWs(): void {
+function markWsAuthExpired(): void {
+  wsShouldReconnect = false;
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
+  expireAuthSession(authSessionStore);
+}
+
+async function ensureWs(): Promise<void> {
   if (typeof window === 'undefined') {
     console.debug('[ensureWs] skipped: no window');
+    return;
+  }
+  wsShouldReconnect = authSessionStore.getToken() !== null;
+  if (!wsShouldReconnect) {
+    console.debug('[ensureWs] skipped: no auth token');
     return;
   }
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
@@ -351,8 +386,16 @@ function ensureWs(): void {
   const url = getWsUrl();
   console.debug('[ensureWs] connecting to', url);
   try {
-    ws = new WebSocket(url);
+    const wsToken = await fetchAuthenticatedWsToken({
+      url: getWsTokenUrl(),
+      sessionStore: authSessionStore,
+    });
+    ws = new WebSocket(url, [wsToken]);
   } catch (e) {
+    if (!authSessionStore.getToken()) {
+      markWsAuthExpired();
+      return;
+    }
     console.error('[ensureWs] WebSocket constructor threw:', e);
     scheduleWsReconnect();
     return;
@@ -363,11 +406,16 @@ function ensureWs(): void {
   current.addEventListener('open', () => {
     console.debug('[ensureWs] CONNECTED');
     wsReconnectAttempt = 0;
+    wsShouldReconnect = true;
   });
 
   current.addEventListener('close', (e) => {
     console.debug('[ensureWs] CLOSED code=' + e.code + ' reason=' + e.reason);
     if (ws === current) ws = null;
+    if (e.code === 1008) {
+      markWsAuthExpired();
+      return;
+    }
     scheduleWsReconnect();
   });
 
@@ -387,6 +435,11 @@ function ensureWs(): void {
       const eventName = msg.name ?? msg.event;
       const payload = msg.data ?? msg.payload;
       console.debug('[WS:msg]', eventName, JSON.stringify(payload).slice(0, 200));
+      if (eventName === 'auth-expired' || eventName === 'realtime.auth-failed') {
+        markWsAuthExpired();
+        current.close(1008, 'auth-expired');
+        return;
+      }
       if (eventName) {
         const handlers = wsListeners.get(eventName);
         if (handlers) {
@@ -406,12 +459,12 @@ function ensureWs(): void {
 }
 
 function scheduleWsReconnect(): void {
-  if (wsReconnectTimer) return;
+  if (wsReconnectTimer || !wsShouldReconnect) return;
   const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempt), 30000);
   wsReconnectAttempt++;
   wsReconnectTimer = setTimeout(() => {
     wsReconnectTimer = null;
-    ensureWs();
+    void ensureWs();
   }, delay);
 }
 
@@ -427,7 +480,7 @@ type EmitterLike<Params> = {
 export function wsEmitter<Params = undefined>(eventName: string): EmitterLike<Params> {
   return {
     on: (callback: (params: Params) => void) => {
-      ensureWs();
+      void ensureWs();
       if (!wsListeners.has(eventName)) {
         wsListeners.set(eventName, new Set());
       }

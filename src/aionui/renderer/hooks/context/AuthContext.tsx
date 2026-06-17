@@ -1,16 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-// M6: CSRF removed with legacy webserver — stub functions for compatibility, re-implement in M7
-const withCsrfToken = <T extends Record<string, unknown>>(data: T): T => data;
-const hasValidCsrfToken = (): boolean => true;
-const clearCookie = (_name: string, _path?: string): void => {};
-const CSRF_COOKIE_NAME = 'csrf-token';
 
-type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
+import { authSessionStore, type AuthUser } from '@/common/auth/session';
+import { AUTH_EXPIRED_EVENT, fetchWithSaasAuth } from '@/common/auth/http';
 
-export interface AuthUser {
-  id: string;
-  username: string;
-}
+type AuthStatus = 'checking' | 'setup_required' | 'authenticated' | 'unauthenticated';
 
 interface LoginParams {
   username: string;
@@ -18,19 +11,22 @@ interface LoginParams {
   remember?: boolean;
 }
 
-type LoginErrorCode =
-  | 'invalidCredentials'
-  | 'tooManyAttempts'
-  | 'serverError'
-  | 'networkError'
-  | 'csrfError'
-  | 'unknown';
+type LoginErrorCode = 'invalidCredentials' | 'tooManyAttempts' | 'serverError' | 'networkError' | 'unknown';
 
 interface LoginResult {
   success: boolean;
   message?: string;
   code?: LoginErrorCode;
-  shouldClearCache?: boolean;
+}
+
+interface SetupPasswordResult {
+  success: boolean;
+  message?: string;
+}
+
+interface ChangePasswordParams {
+  currentPassword: string;
+  newPassword: string;
 }
 
 interface AuthContextValue {
@@ -38,6 +34,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   status: AuthStatus;
   login: (params: LoginParams) => Promise<LoginResult>;
+  setupPassword: (newPassword: string) => Promise<SetupPasswordResult>;
+  changePassword: (params: ChangePasswordParams) => Promise<SetupPasswordResult>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   clearAuthCache: () => void;
@@ -45,51 +43,78 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const AUTH_USER_ENDPOINT = '/api/auth/user';
+type AuthStatusResponse = {
+  success: boolean;
+  needs_setup: boolean;
+  user_count: number;
+  is_authenticated: boolean;
+};
 
-const isDesktopRuntime = typeof window !== 'undefined' && Boolean(window.electronAPI);
+type AuthUserResponse = {
+  success: boolean;
+  user?: AuthUser;
+};
 
-// Clear expired auth cache including cookies and localStorage
-// 清除过期的认证缓存，包括 Cookie 和 localStorage
+type LoginResponse = {
+  success: boolean;
+  message?: string;
+  token?: string;
+  user?: AuthUser;
+  error?: string;
+  code?: string;
+};
+
 function clearAuthCache(): void {
-  if (typeof window === 'undefined') return;
+  authSessionStore.clearSession();
+}
 
+async function readJson<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get('Content-Type');
+  if (!contentType?.includes('application/json')) return null;
+  return (await response.json()) as T;
+}
+
+async function fetchAuthStatus(signal?: AbortSignal): Promise<AuthStatusResponse | null> {
   try {
-    // Clear CSRF cookie
-    clearCookie(CSRF_COOKIE_NAME);
-    clearCookie(CSRF_COOKIE_NAME, '/');
-
-    // Clear localStorage auth-related items
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (key.includes('auth') || key.includes('csrf') || key.includes('token'))) {
-        keysToRemove.push(key);
+    const response = await fetchWithSaasAuth(
+      '/api/auth/status',
+      {
+        method: 'GET',
+        headers: {},
+        signal,
+      },
+      {
+        auth: 'none',
+        retryOn401: false,
       }
-    }
-    keysToRemove.forEach((key) => localStorage.removeItem(key));
+    );
+    if (!response.ok) return null;
+    return readJson<AuthStatusResponse>(response);
   } catch (error) {
-    console.error('Failed to clear auth cache:', error);
+    if ((error as Error).name === 'AbortError') return null;
+    console.error('Failed to fetch auth status:', error);
+    return null;
   }
 }
 
 async function fetchCurrentUser(signal?: AbortSignal): Promise<AuthUser | null> {
   try {
-    const response = await fetch(AUTH_USER_ENDPOINT, {
-      method: 'GET',
-      credentials: 'include',
-      signal,
-    });
+    const response = await fetchWithSaasAuth(
+      '/api/auth/user',
+      {
+        method: 'GET',
+        headers: {},
+        signal,
+      },
+      {
+        auth: 'required',
+      }
+    );
 
-    if (!response.ok) {
-      return null;
-    }
+    if (!response.ok) return null;
 
-    const data = (await response.json()) as {
-      success: boolean;
-      user?: AuthUser;
-    };
-    if (data.success && data.user) {
+    const data = await readJson<AuthUserResponse>(response);
+    if (data?.success && data.user) {
       return data.user;
     }
   } catch (error) {
@@ -103,29 +128,54 @@ async function fetchCurrentUser(signal?: AbortSignal): Promise<AuthUser | null> 
 }
 
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(authSessionStore.getUser());
   const [status, setStatus] = useState<AuthStatus>('checking');
   const [ready, setReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
-    if (isDesktopRuntime) {
-      setStatus('authenticated');
-      setUser(null);
-      setReady(true);
-      return;
-    }
-
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setStatus('checking');
 
+    const authStatus = await fetchAuthStatus(controller.signal);
+    if (!authStatus) {
+      setUser(authSessionStore.getUser());
+      setStatus(authSessionStore.getNeedsSetup() ? 'setup_required' : 'unauthenticated');
+      setReady(true);
+      return;
+    }
+
+    if (authStatus.needs_setup) {
+      authSessionStore.clearSession();
+      authSessionStore.setNeedsSetup(true);
+      setUser(null);
+      setStatus('setup_required');
+      setReady(true);
+      return;
+    }
+
+    authSessionStore.setNeedsSetup(false);
+
+    const token = authSessionStore.getToken();
+    if (!token) {
+      setUser(null);
+      setStatus('unauthenticated');
+      setReady(true);
+      return;
+    }
+
     const currentUser = await fetchCurrentUser(controller.signal);
     if (currentUser) {
+      authSessionStore.setSession({
+        token,
+        user: currentUser,
+      });
       setUser(currentUser);
       setStatus('authenticated');
     } else {
+      authSessionStore.clearSession();
       setUser(null);
       setStatus('unauthenticated');
     }
@@ -139,101 +189,71 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     };
   }, [refresh]);
 
-  const login = useCallback(async ({ username, password, remember }: LoginParams): Promise<LoginResult> => {
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      abortRef.current?.abort();
+      setUser(null);
+      setStatus(authSessionStore.getNeedsSetup() ? 'setup_required' : 'unauthenticated');
+      setReady(true);
+    };
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    };
+  }, []);
+
+  const login = useCallback(async ({ username, password }: LoginParams): Promise<LoginResult> => {
     try {
-      if (isDesktopRuntime) {
-        setReady(true);
-        return { success: true };
-      }
-
-      // Check CSRF token availability before login
-      // If token is missing, clear cache and inform user
-      const csrfTokenValid = hasValidCsrfToken();
-      if (!csrfTokenValid) {
-        console.warn('CSRF token missing or invalid, clearing cache');
-        clearAuthCache();
-        // Allow login to proceed anyway - server will set new token
-      }
-
-      // P1 安全修复：登录请求需要 CSRF Token / P1 Security fix: Login needs CSRF token
-      // Backend route is /login; web-host's static-server explicitly proxies it.
-      const response = await fetch('/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithSaasAuth(
+        '/login',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username, password }),
         },
-        credentials: 'include',
-        body: JSON.stringify(withCsrfToken({ username, password, remember })),
-      });
+        {
+          auth: 'none',
+          retryOn401: false,
+        }
+      );
+      const data = (await readJson<LoginResponse>(response)) ?? { success: false };
 
-      const data = (await response.json()) as {
-        success: boolean;
-        message?: string;
-        user?: AuthUser;
-      };
-
-      if (!response.ok || !data.success || !data.user) {
+      if (!response.ok || !data.success || !data.user || !data.token) {
         let code: LoginErrorCode = 'unknown';
-        let message = data?.message ?? 'Login failed';
-        let shouldClearCache = false;
-
         if (response.status === 401) {
           code = 'invalidCredentials';
-        } else if (response.status === 403) {
-          // CSRF validation failed - clear cache
-          code = 'csrfError';
-          message = 'Security token expired. Please try again.';
-          shouldClearCache = true;
         } else if (response.status === 429) {
           code = 'tooManyAttempts';
         } else if (response.status >= 500) {
           code = 'serverError';
-        } else if (!csrfTokenValid) {
-          // If we knew CSRF was invalid and login failed, suggest cache clear
-          code = 'csrfError';
-          message = 'Login failed due to cached data. Please clear your browser cache and try again.';
-          shouldClearCache = true;
         }
-
-        // Clear cache on CSRF-related errors
-        if (shouldClearCache) {
-          clearAuthCache();
-        }
-
         return {
           success: false,
-          message,
+          message: data.error ?? data.message ?? 'Login failed',
           code,
-          shouldClearCache,
         };
       }
 
+      authSessionStore.setNeedsSetup(false);
+      authSessionStore.setSession({
+        token: data.token,
+        user: data.user,
+      });
       setUser(data.user);
       setStatus('authenticated');
       setReady(true);
 
-      // Re-enable WebSocket reconnection after successful login (WebUI mode only)
-      if (typeof window !== 'undefined' && (window as any).__websocketReconnect) {
-        (window as any).__websocketReconnect();
+      const win = window as Window & { __websocketReconnect?: () => void };
+      if (typeof window !== 'undefined' && win.__websocketReconnect) {
+        win.__websocketReconnect();
       }
 
       return { success: true };
     } catch (error) {
       console.error('Login request failed:', error);
-
-      // Check if error is related to CSRF token parsing
-      const errorMessage = (error as Error).message;
-      if (errorMessage?.includes('parse') || errorMessage?.includes('csrf') || errorMessage?.includes('cookie')) {
-        // CSRF or cookie parsing error - clear cache
-        clearAuthCache();
-        return {
-          success: false,
-          message: 'Login failed due to cached data. Please clear your browser cache and try again.',
-          code: 'csrfError',
-          shouldClearCache: true,
-        };
-      }
-
       return {
         success: false,
         message: 'Network error. Please try again.',
@@ -242,31 +262,104 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     }
   }, []);
 
-  const logout = useCallback(async () => {
-    if (isDesktopRuntime) {
-      setUser(null);
-      setStatus('authenticated');
-      setReady(true);
-      return;
-    }
-
+  const setupPassword = useCallback(async (newPassword: string): Promise<SetupPasswordResult> => {
     try {
-      await fetch('/logout', {
-        method: 'POST',
-        // Logout also needs CSRF token / 登出同样需要 CSRF Token
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithSaasAuth(
+        '/api/auth/setup-password',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ new_password: newPassword }),
         },
-        credentials: 'include',
-        body: JSON.stringify(withCsrfToken({})),
-      });
+        {
+          auth: 'none',
+          retryOn401: false,
+        }
+      );
+
+      const data = await readJson<{ success?: boolean; error?: string; message?: string }>(response);
+      if (!response.ok) {
+        return {
+          success: false,
+          message: data?.error ?? data?.message ?? 'Failed to set password',
+        };
+      }
+
+      authSessionStore.setNeedsSetup(false);
+      setStatus('unauthenticated');
+      setReady(true);
+      return {
+        success: true,
+        message: data?.message,
+      };
+    } catch (error) {
+      console.error('Setup password request failed:', error);
+      return {
+        success: false,
+        message: 'Network error. Please try again.',
+      };
+    }
+  }, []);
+
+  const changePassword = useCallback(async ({ currentPassword, newPassword }: ChangePasswordParams) => {
+    try {
+      const response = await fetchWithSaasAuth(
+        '/api/auth/change-password',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+          }),
+        },
+        {
+          auth: 'required',
+        }
+      );
+      const data = await readJson<{ success?: boolean; error?: string; message?: string }>(response);
+      if (!response.ok) {
+        return {
+          success: false,
+          message: data?.error ?? data?.message ?? 'Failed to change password',
+        };
+      }
+      return {
+        success: true,
+        message: data?.message,
+      };
+    } catch (error) {
+      console.error('Change password request failed:', error);
+      return {
+        success: false,
+        message: 'Network error. Please try again.',
+      };
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetchWithSaasAuth(
+        '/logout',
+        {
+          method: 'POST',
+          headers: {},
+        },
+        {
+          auth: 'required',
+          retryOn401: false,
+        }
+      );
     } catch (error) {
       console.error('Logout request failed:', error);
     } finally {
+      authSessionStore.clearSession();
       setUser(null);
       setStatus('unauthenticated');
-      // Clear cache on logout for security
-      clearAuthCache();
     }
   }, []);
 
@@ -276,11 +369,13 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       user,
       status,
       login,
+      setupPassword,
+      changePassword,
       logout,
       refresh,
       clearAuthCache,
     }),
-    [login, logout, ready, refresh, status, user]
+    [changePassword, login, logout, ready, refresh, setupPassword, status, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

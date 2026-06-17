@@ -56,6 +56,9 @@ type MockSocketListener = (payload: string) => void;
 type MockState = {
   nextId: number;
   currentUser: MockUser | null;
+  needsSetup: boolean;
+  accessToken: string | null;
+  wsToken: string | null;
   settings: Record<string, unknown>;
   conversations: MockConversation[];
   messages: Record<string, MockDbMessage[]>;
@@ -505,6 +508,9 @@ const createInitialState = (): MockState => {
   return {
     nextId: 1,
     currentUser: null,
+    needsSetup: false,
+    accessToken: null,
+    wsToken: null,
     settings: {
       language: 'zh-CN',
       theme: 'light',
@@ -562,6 +568,39 @@ function listConversations() {
       has_more: false,
     },
   };
+}
+
+function createAccessToken(username: string): string {
+  return `mock-access-token:${username}:${Date.now()}`;
+}
+
+function createWsToken(): string {
+  return `mock-ws-token:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+function readAuthorization(init?: RequestInit): string | null {
+  const headers = init?.headers;
+  if (!headers) return null;
+  if (headers instanceof Headers) {
+    return headers.get('Authorization');
+  }
+  if (Array.isArray(headers)) {
+    const matched = headers.find(([key]) => key.toLowerCase() === 'authorization');
+    return matched?.[1] ?? null;
+  }
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === 'authorization') {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function hasValidBearerAuth(init?: RequestInit): boolean {
+  const authHeader = readAuthorization(init);
+  return authHeader === `Bearer ${mockState.accessToken}`;
 }
 
 function broadcast(name: string, data: unknown): void {
@@ -686,7 +725,51 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
     }
   }
 
+  if (pathname === '/api/auth/status' && method === 'GET') {
+    return jsonResponse({
+      success: true,
+      needs_setup: mockState.needsSetup,
+      user_count: mockState.currentUser ? 1 : 0,
+      is_authenticated: hasValidBearerAuth(init),
+    });
+  }
+
+  if (pathname === '/api/auth/setup-password' && method === 'POST') {
+    const newPassword =
+      body && typeof body === 'object' && typeof (body as { new_password?: unknown }).new_password === 'string'
+        ? (body as { new_password: string }).new_password
+        : '';
+
+    if (!mockState.needsSetup) {
+      return jsonResponse({ success: false, error: 'System already initialized' }, { status: 409 });
+    }
+
+    if (newPassword.length < 8) {
+      return jsonResponse({ success: false, error: 'PASSWORD_TOO_SHORT' }, { status: 400 });
+    }
+
+    mockState.needsSetup = false;
+    return jsonResponse({ success: true, message: 'Initial admin password set' });
+  }
+
+  if (pathname === '/api/auth/refresh' && method === 'POST') {
+    const token =
+      body && typeof body === 'object' && typeof (body as { token?: unknown }).token === 'string'
+        ? (body as { token: string }).token
+        : '';
+
+    if (!mockState.accessToken || token !== mockState.accessToken) {
+      return jsonResponse({ success: false, error: 'Invalid token' }, { status: 401 });
+    }
+
+    mockState.accessToken = createAccessToken(mockState.currentUser?.username ?? 'demo');
+    return jsonResponse({ success: true, token: mockState.accessToken });
+  }
+
   if (pathname === '/api/auth/user' && method === 'GET') {
+    if (!hasValidBearerAuth(init) || !mockState.currentUser) {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     return jsonResponse(
       mockState.currentUser
         ? { success: true, user: mockState.currentUser }
@@ -697,17 +780,57 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
   }
 
   if (pathname === '/login' && method === 'POST') {
+    if (mockState.needsSetup) {
+      return jsonResponse({ success: false, error: 'SETUP_REQUIRED' }, { status: 409 });
+    }
     const username =
       body && typeof body === 'object' && typeof (body as { username?: unknown }).username === 'string'
         ? (body as { username: string }).username
         : 'demo';
     mockState.currentUser = { id: 'user-demo', username };
-    return jsonResponse({ success: true, user: mockState.currentUser });
+    mockState.accessToken = createAccessToken(username);
+    return jsonResponse({ success: true, user: mockState.currentUser, token: mockState.accessToken, message: 'Login successful' });
   }
 
   if (pathname === '/logout' && method === 'POST') {
     mockState.currentUser = null;
+    mockState.accessToken = null;
+    mockState.wsToken = null;
     return jsonResponse({ success: true });
+  }
+
+  if (pathname === '/api/auth/change-password' && method === 'POST') {
+    if (!hasValidBearerAuth(init)) {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const currentPassword =
+      body && typeof body === 'object' && typeof (body as { current_password?: unknown }).current_password === 'string'
+        ? (body as { current_password: string }).current_password
+        : '';
+    const newPassword =
+      body && typeof body === 'object' && typeof (body as { new_password?: unknown }).new_password === 'string'
+        ? (body as { new_password: string }).new_password
+        : '';
+
+    if (!currentPassword || !newPassword || newPassword.length < 8) {
+      return jsonResponse({ success: false, error: 'PASSWORD_TOO_SHORT' }, { status: 400 });
+    }
+
+    return jsonResponse({ success: true, message: 'Password changed' });
+  }
+
+  if (pathname === '/api/ws-token' && method === 'GET') {
+    if (!hasValidBearerAuth(init)) {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    mockState.wsToken = createWsToken();
+    return jsonResponse({
+      success: true,
+      ws_token: mockState.wsToken,
+      expires_in: 300,
+    });
   }
 
   if (pathname === '/api/agents' && method === 'GET') {
@@ -991,9 +1114,11 @@ class MockWebSocket extends EventTarget {
   private closed = false;
   private readonly listener: MockSocketListener;
 
-  constructor(url: string | URL) {
+  constructor(url: string | URL, protocols?: string | string[]) {
     super();
     this.url = String(url);
+    const requestedProtocol = Array.isArray(protocols) ? protocols[0] : protocols;
+    this.protocol = requestedProtocol ?? '';
     this.listener = (payload) => {
       if (this.readyState !== MockWebSocket.OPEN) return;
       const event = new MessageEvent<string>('message', { data: payload });
@@ -1004,6 +1129,10 @@ class MockWebSocket extends EventTarget {
 
     queueMicrotask(() => {
       if (this.closed) return;
+      if (this.protocol && this.protocol !== mockState.wsToken) {
+        this.close(1008, 'invalid ws token');
+        return;
+      }
       this.readyState = MockWebSocket.OPEN;
       const event = new Event('open');
       this.dispatchEvent(event);
@@ -1051,6 +1180,9 @@ export function installInterceptMockRuntime(): void {
 export function resetInterceptMockState(): void {
   const initialState = createInitialState();
   mockState.currentUser = initialState.currentUser;
+  mockState.needsSetup = initialState.needsSetup;
+  mockState.accessToken = initialState.accessToken;
+  mockState.wsToken = initialState.wsToken;
   mockState.settings = initialState.settings;
   mockState.conversations = initialState.conversations;
   mockState.messages = initialState.messages;

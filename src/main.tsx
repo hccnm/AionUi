@@ -42,19 +42,38 @@ const ArcoConfig: React.FC<PropsWithChildren> = ({ children }) => (
 );
 
 const MainApp = () => {
-  const { ready } = useAuth();
+  const { ready, status } = useAuth();
   const [configReady, setConfigReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
+    if (status !== 'authenticated') {
+      configService.reset();
+      setConfigReady(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setConfigReady(false);
     configService
       .initialize()
       .catch((error) => {
         console.error('Failed to initialize config service:', error);
       })
-      .finally(() => setConfigReady(true));
-  }, []);
+      .finally(() => {
+        if (!cancelled) {
+          setConfigReady(true);
+        }
+      });
 
-  if (!ready || !configReady) {
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
+
+  if (!ready || (status === 'authenticated' && !configReady)) {
     return null;
   }
 

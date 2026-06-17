@@ -5,8 +5,10 @@
  */
 
 import { bridge, logger } from '@office-ai/platform';
-import { WEBUI_DEFAULT_PORT } from '@/common/config/constants';
+import { authSessionStore } from '@/common/auth/session';
+import { expireAuthSession, fetchWsToken as fetchAuthenticatedWsToken } from '@/common/auth/http';
 import type { ElectronBridgeAPI } from '@/common/types/platform/electron';
+import { resolveHttpUrl, resolveWsUrl } from '@web/config/backend';
 
 interface CustomWindow extends Window {
   electronAPI?: ElectronBridgeAPI;
@@ -42,9 +44,8 @@ if (win.electronAPI) {
   // Web 环境 - 使用 WebSocket 通信，并在登录后自动补上已获取 Cookie 的连接
   // Web runtime bridge: ensure the socket reconnects after login so session cookie can be sent.
   // Path must be `/ws` — web-host's static-server only proxies WebSocket upgrades under /ws.
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const defaultHost = `${window.location.hostname}:${WEBUI_DEFAULT_PORT}`;
-  const socketUrl = `${protocol}//${window.location.host || defaultHost}/ws`;
+  const socketUrl = resolveWsUrl();
+  const wsTokenUrl = resolveHttpUrl('/api/ws-token');
 
   type QueuedMessage = { name: string; data: unknown };
 
@@ -55,6 +56,23 @@ if (win.electronAPI) {
   let shouldReconnect = true; // Flag to control reconnection
 
   const messageQueue: QueuedMessage[] = [];
+
+  const handleAuthExpired = () => {
+    shouldReconnect = false;
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    expireAuthSession(authSessionStore);
+
+    if (window.location.pathname === '/login' || window.location.hash.includes('/login')) {
+      return;
+    }
+
+    setTimeout(() => {
+      window.location.hash = '/login';
+    }, 500);
+  };
 
   // 1.发送队列中积压的消息，确保在重新建立连接后不会丢事件
   const flushQueue = () => {
@@ -79,19 +97,27 @@ if (win.electronAPI) {
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null;
       reconnectDelay = Math.min(reconnectDelay * 2, 8000);
-      connect();
+      void connect();
     }, reconnectDelay);
   };
 
   // 3.建立 WebSocket 连接（或复用已有的 OPEN/CONNECTING 状态）
-  const connect = () => {
+  const connect = async () => {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
     try {
-      socket = new WebSocket(socketUrl);
+      const wsToken = await fetchAuthenticatedWsToken({
+        url: wsTokenUrl,
+        sessionStore: authSessionStore,
+      });
+      socket = new WebSocket(socketUrl, [wsToken]);
     } catch (error) {
+      if (!authSessionStore.getToken()) {
+        handleAuthExpired();
+        return;
+      }
       scheduleReconnect();
       return;
     }
@@ -131,33 +157,8 @@ if (win.electronAPI) {
         // Handle auth expiration - stop reconnecting and redirect to login
         if (payload.name === 'auth-expired') {
           console.warn('[WebSocket] Authentication expired, stopping reconnection');
-          shouldReconnect = false;
-
-          // 清除所有待执行的重连定时器
-          // Clear any pending reconnection timer
-          if (reconnectTimer !== null) {
-            window.clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-          }
-
-          // 关闭 socket 并跳转到登录页
-          // Close the socket and redirect to login page
           socket?.close();
-
-          // 已在登录页则不再重定向，防止无限刷新循环
-          // Skip redirect if already on login page to prevent infinite reload loop
-          if (window.location.pathname === '/login' || window.location.hash.includes('/login')) {
-            return;
-          }
-
-          // 短暂延迟后跳转到登录页，以便显示 UI 反馈
-          // Redirect to login page after a short delay to show any UI feedback
-          // Use hash navigation to stay within the SPA (HashRouter), avoiding a full
-          // page reload that would land on an empty hash and cause a blank screen.
-          setTimeout(() => {
-            window.location.hash = '/login';
-          }, 1000);
-
+          handleAuthExpired();
           return;
         }
 
@@ -181,20 +182,7 @@ if (win.electronAPI) {
       }
       if (event.code === 1008) {
         console.warn('[WebSocket] Connection rejected by server (policy violation), redirecting to login');
-        shouldReconnect = false;
-        if (reconnectTimer !== null) {
-          window.clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-        // 已在登录页则不再重定向，防止无限刷新循环
-        // Skip redirect if already on login page to prevent infinite reload loop
-        if (window.location.pathname === '/login' || window.location.hash.includes('/login')) {
-          return;
-        }
-        // Use hash navigation to stay within the SPA (HashRouter)
-        setTimeout(() => {
-          window.location.hash = '/login';
-        }, 500);
+        handleAuthExpired();
         return;
       }
 
@@ -209,7 +197,7 @@ if (win.electronAPI) {
   // 4.确保在发送/订阅前已经发起连接
   const ensureSocket = () => {
     if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
-      connect();
+      void connect();
     }
   };
 
@@ -244,13 +232,13 @@ if (win.electronAPI) {
     },
   });
 
-  connect();
+  void connect();
 
   // Expose reconnection control for login flow
   win.__websocketReconnect = () => {
     shouldReconnect = true;
     reconnectDelay = 500;
-    connect();
+    void connect();
   };
 }
 

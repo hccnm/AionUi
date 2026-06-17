@@ -1,24 +1,24 @@
-import { request } from './httpClient';
+import type { AuthSessionStore } from '../aionui/common/auth/session';
+import { fetchWsToken as fetchSaasWsToken } from '../aionui/common/auth/http';
 import { resolveWsUrl } from '../config/backend';
-
-type WsTokenResponse = {
-  token?: string;
-};
 
 type CreateAuthenticatedWebSocketOptions = {
   backendBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  sessionStore?: AuthSessionStore;
   WebSocketCtor?: typeof WebSocket;
 };
 
-export async function fetchWsToken(options: Pick<CreateAuthenticatedWebSocketOptions, 'backendBaseUrl' | 'fetchImpl'> = {}) {
-  const response = await request<WsTokenResponse>('/api/ws-token', {
-    method: 'GET',
-    backendBaseUrl: options.backendBaseUrl,
+export async function fetchWsToken(
+  options: Pick<CreateAuthenticatedWebSocketOptions, 'backendBaseUrl' | 'fetchImpl' | 'sessionStore'> = {}
+) {
+  const wsUrl = resolveWsUrl(options.backendBaseUrl);
+  const httpUrl = wsUrl.replace(/^ws:/, 'http:').replace(/^wss:/, 'https:').replace(/\/ws$/, '/api/ws-token');
+  return fetchSaasWsToken({
+    url: httpUrl,
     fetchImpl: options.fetchImpl,
+    sessionStore: options.sessionStore,
   });
-  if (!response.token) throw new Error('WebSocket token missing from backend response');
-  return response.token;
 }
 
 export async function createAuthenticatedWebSocket(options: CreateAuthenticatedWebSocketOptions = {}): Promise<WebSocket> {

@@ -18,6 +18,7 @@ import ChannelTelegramLogo from '@/renderer/assets/channel-logos/telegram.svg';
 import ChannelWecomLogo from '@/renderer/assets/channel-logos/wecom.svg';
 import ChannelWeixinLogo from '@/renderer/assets/channel-logos/weixin.svg';
 import { isElectronDesktop } from '@/renderer/utils/platform';
+import { useAuth } from '@/renderer/hooks/context/AuthContext';
 import { Button, Form, Input, Message, Switch, Tabs, Tooltip } from '@arco-design/web-react';
 import { CheckOne, Communication, Copy, Earth, EditTwo, Refresh } from '@icon-park/react';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -71,6 +72,7 @@ const DESKTOP_WEBUI_ALLOW_REMOTE_KEY = 'webui.desktop.allowRemote';
  */
 const WebuiModalContent: React.FC = () => {
   const { t } = useTranslation();
+  const { changePassword } = useAuth();
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';
   const [activeTab, setActiveTab] = useState<'webui' | 'channels'>('webui');
@@ -407,11 +409,13 @@ const WebuiModalContent: React.FC = () => {
       const values = await form.validate();
       setPasswordLoading(true);
 
-      // changePassword goes through httpBridge; on 4xx/5xx it throws
-      // BackendHttpError, caught below and translated via errorCodeMap.
-      await webui.changePassword.invoke({
+      const result = await changePassword({
+        currentPassword: values.currentPassword,
         newPassword: values.newPassword,
       });
+      if (!result.success) {
+        throw new Error(result.message || t('settings.webui.passwordChangeFailed'));
+      }
       Message.success(t('settings.webui.passwordChanged'));
       setSetPasswordModalVisible(false);
       form.resetFields();
@@ -915,6 +919,13 @@ const WebuiModalContent: React.FC = () => {
         size='small'
       >
         <Form form={form} layout='vertical' className='pt-16px'>
+          <Form.Item
+            label={t('settings.webui.currentPassword')}
+            field='currentPassword'
+            rules={[{ required: true, message: t('settings.webui.currentPasswordRequired') }]}
+          >
+            <Input.Password placeholder={t('settings.webui.currentPasswordPlaceholder')} />
+          </Form.Item>
           <Form.Item
             label={t('settings.webui.newPassword')}
             field='newPassword'

@@ -1,4 +1,6 @@
 import type { ConfigKey, ConfigKeyMap } from './configKeys';
+import { fetchWithSaasAuth } from '@/common/auth/http';
+import { getBackendBaseUrl } from '@web/config/backend';
 
 type Subscriber = (value: unknown) => void;
 
@@ -9,6 +11,10 @@ declare global {
 }
 
 function getBaseUrl(): string {
+  const backendBaseUrl = getBackendBaseUrl();
+  if (backendBaseUrl) {
+    return backendBaseUrl;
+  }
   // WebUI browser mode: no preload, fetch same-origin so web-host's
   // static-server reverse-proxies /api/* to the backend.
   if (typeof window !== 'undefined' && typeof document !== 'undefined' && !(window as Window).__backendPort) {
@@ -24,7 +30,7 @@ async function fetchJson<T>(method: string, path: string, body?: unknown): Promi
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
-  const response = await fetch(url, {
+  const response = await fetchWithSaasAuth(url, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
