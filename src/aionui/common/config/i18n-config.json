@@ -1,0 +1,27 @@
+{
+  "referenceLanguage": "zh-CN",
+  "fallbackLanguage": "zh-CN",
+  "supportedLanguages": ["zh-CN"],
+  "modules": [
+    "common",
+    "agentMode",
+    "update",
+    "login",
+    "fileSelection",
+    "preview",
+    "conversation",
+    "settings",
+    "messages",
+    "mcp",
+    "acp",
+    "codex",
+    "tools",
+    "google",
+    "cron",
+    "starOffice",
+    "guid",
+    "agent",
+    "team",
+    "pet"
+  ]
+}

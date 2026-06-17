@@ -1,0 +1,53 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (aionui.com)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+export const uuid = (length = 8) => {
+  try {
+    // globalThis.crypto is available in all modern browsers and Node.js 19+
+    const crypto = globalThis.crypto;
+    if (crypto) {
+      if (typeof crypto.randomUUID === 'function' && length >= 36) {
+        return crypto.randomUUID();
+      }
+      if (typeof crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(Math.ceil(length / 2));
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'))
+          .join('')
+          .slice(0, length);
+      }
+    }
+  } catch {
+    // Fallback without crypto
+  }
+
+  // Monotonic fallback without cryptographically secure randomness
+  const base = Date.now().toString(36);
+  return (base + base).slice(0, length);
+};
+
+export const parseError = (error: unknown): string => {
+  if (typeof error === 'object' && error !== null) {
+    const err = error as { backendMessage?: unknown; msg?: unknown; message?: unknown };
+    if (typeof err.msg === 'string') return err.msg;
+    if (typeof err.backendMessage === 'string' && err.backendMessage.trim()) return err.backendMessage;
+    if (typeof err.message === 'string') return err.message;
+  }
+
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
+/**
+ * 单语言 Web 版固定使用 zh-CN。
+ */
+export const resolveLocaleKey = (_language: string): 'zh-CN' => 'zh-CN';
