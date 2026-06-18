@@ -46,7 +46,7 @@ import { appendSpeechTranscript } from '@/renderer/hooks/system/useSpeechInput';
 import { getConversationInputHistory, isCaretOnFirstLine } from '@/renderer/utils/chat/messageHistory';
 import './sendbox.css';
 
-const constVoid = (): void => undefined;
+const constVoid = (..._args: unknown[]): void => undefined;
 // 临界值：超过该字符数直接切换至多行模式，避免为超长文本做昂贵的宽度测量
 // Threshold: switch to multi-line mode directly when character count exceeds this value to avoid heavy layout work
 const MAX_SINGLE_LINE_CHARACTERS = 800;
@@ -772,7 +772,7 @@ const SendBox: React.FC<{
     }
 
     const nextExternalOwnedPaths = new Set(
-      Array.from(externalOwnedPathsRef.current).filter((path) => incomingPaths.has(path))
+      Array.from(externalOwnedPathsRef.current).filter((path: string) => incomingPaths.has(path))
     );
     for (const path of incomingPaths) {
       if (!nextMentionOwnedPaths.has(path) && !everMentionOwnedPathsRef.current.has(path)) {

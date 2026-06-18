@@ -6,11 +6,14 @@
 
 import { ipcBridge } from '@/common';
 import type { IDirOrFile } from '@/common/adapter/ipcBridge';
+import { runSingleFlight } from '@/renderer/pages/conversation/utils/singleFlight';
 import { emitter } from '@/renderer/utils/emitter';
 import { dispatchWorkspaceHasFilesEvent } from '@/renderer/utils/workspace/workspaceEvents';
 import { useCallback, useRef, useState } from 'react';
 import type { SelectedNodeRef } from '../types';
 import { getFirstLevelKeys, mergeLoadedChildren } from '../utils/treeHelpers';
+
+const workspaceTreeInflight = new Map<string, Promise<IDirOrFile[]>>();
 
 interface UseWorkspaceTreeOptions {
   workspace: string;
@@ -72,8 +75,10 @@ export function useWorkspaceTree({ workspace, conversation_id, eventPrefix }: Us
     (path: string, search?: string) => {
       const seq = ++loadSeqRef.current;
       setLoadingHandler(true);
-      return ipcBridge.conversation.getWorkspace
-        .invoke({ path, workspace, conversation_id, search: search || '' })
+      const requestKey = `${conversation_id}:${workspace}:${path}:${search || ''}`;
+      return runSingleFlight(workspaceTreeInflight, requestKey, () =>
+        ipcBridge.conversation.getWorkspace.invoke({ path, workspace, conversation_id, search: search || '' })
+      )
         .then((res) => {
           // Ignore stale responses from aborted requests:
           // The backend aborts previous getWorkspace calls, returning [].

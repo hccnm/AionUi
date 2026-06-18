@@ -8,7 +8,6 @@ import { ipcBridge } from '@/common';
 import type { IConversationMcpStatus, IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import { uuid } from '@/common/utils';
 import addChatIcon from '@/renderer/assets/icons/add-chat.svg';
-import { CronJobManager } from '@/renderer/pages/cron';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { usePresetAssistantInfo, resolveAssistantConfigId } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { iconColors } from '@/renderer/styles/colors';
@@ -172,11 +171,6 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     sider: <ChatSlider conversation={conversation} />,
     headerExtra: (
       <div className='flex items-center gap-8px'>
-        <CronJobManager
-          conversation_id={conversation.id}
-          cron_job_id={conversation.extra?.cron_job_id as string | undefined}
-          hasCronSkill={hasLoadedSkill(conversation, 'cron')}
-        />
         {!isMobile && <AionrsModelSelector selection={modelSelection} />}
       </div>
     ),
@@ -192,6 +186,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     <ChatLayout {...chatLayoutProps} conversation_id={conversation.id}>
       <AionrsChat
         conversation_id={conversation.id}
+        conversation={conversation}
         workspace={conversation.extra.workspace}
         modelSelection={modelSelection}
         session_mode={conversation.extra?.session_mode}
@@ -236,6 +231,7 @@ const ChatConversation: React.FC<{
           <AcpChat
             key={conversation.id}
             conversation_id={conversation.id}
+            conversation={conversation}
             workspace={conversation.extra?.workspace}
             backend={conversation.extra?.backend || 'claude'}
             session_mode={conversation.extra?.session_mode}
@@ -260,6 +256,7 @@ const ChatConversation: React.FC<{
           <AcpChat
             key={conversation.id}
             conversation_id={conversation.id}
+            conversation={conversation}
             workspace={conversation.extra?.workspace}
             backend='gemini'
             agent_name={assistantDisplayName}
@@ -277,6 +274,7 @@ const ChatConversation: React.FC<{
           <AcpChat
             key={conversation.id}
             conversation_id={conversation.id}
+            conversation={conversation}
             workspace={conversation.extra?.workspace}
             backend='codex'
             agent_name={assistantDisplayName}
@@ -391,15 +389,6 @@ const ChatConversation: React.FC<{
             onOpenUrl={(url, metadata) => {
               openPreview(url, 'url', metadata);
             }}
-          />
-        </div>
-      )}
-      {conversation && (
-        <div className='shrink-0'>
-          <CronJobManager
-            conversation_id={conversation.id}
-            cron_job_id={conversation.extra?.cron_job_id as string | undefined}
-            hasCronSkill={hasLoadedSkill(conversation, 'cron')}
           />
         </div>
       )}

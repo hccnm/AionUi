@@ -75,6 +75,7 @@ export function useSlashCommands(conversation_id: string, options: UseSlashComma
     const cached = getCachedCommands(conversation_id);
     if (cached) {
       setCommands(cached);
+      return;
     }
 
     void ipcBridge.conversation.getSlashCommands

@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IConversationMcpStatus } from '@/common/config/storage';
+import type { IConversationMcpStatus, TChatConversation } from '@/common/config/storage';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
 import MobileActionSheet, {
@@ -33,7 +33,6 @@ import {
   useConversationCommandQueue,
   type ConversationCommandQueueItem,
 } from '@/renderer/pages/conversation/platforms/useConversationCommandQueue';
-import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import { getConversationRuntimeWorkspaceErrorMessage } from '@/renderer/pages/conversation/utils/conversationCreateError';
 import { warmupConversation } from '@/renderer/pages/conversation/utils/warmupConversation';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
@@ -96,10 +95,12 @@ const useSendBoxDraft = (conversation_id: string) => {
 
 const AionrsSendBox: React.FC<{
   conversation_id: string;
+  workspace?: string;
   modelSelection: AionrsModelSelection;
   session_mode?: string;
   agent_name?: string;
-}> = ({ conversation_id, modelSelection, session_mode, agent_name }) => {
+  initialConversation?: TChatConversation;
+}> = ({ conversation_id, workspace, modelSelection, session_mode, agent_name, initialConversation }) => {
   const [workspacePath, setWorkspacePath] = useState('');
   const [dynamicModes, setDynamicModes] = useState<AgentModeOption[]>([]);
   const [currentMode, setCurrentMode] = useState<string | undefined>(session_mode);
@@ -123,6 +124,7 @@ const AionrsSendBox: React.FC<{
 
   const { thought, running, hasHydratedRunningState, setActiveMsgId, setWaitingResponse, resetState } =
     useAionrsMessage(conversation_id, {
+      initialConversation,
       onConfigChanged: (capabilities) => {
         const modes = (capabilities as { modes?: string[] })?.modes;
         if (modes && modes.length > 0) {
@@ -150,11 +152,11 @@ const AionrsSendBox: React.FC<{
   }, [conversation_id, teamPermission]);
 
   useEffect(() => {
-    void getConversationOrNull(conversation_id).then((res) => {
-      if (!res?.extra?.workspace) return;
-      setWorkspacePath(res.extra.workspace);
-    });
-  }, [conversation_id]);
+    if (!workspace) {
+      return;
+    }
+    setWorkspacePath(workspace);
+  }, [workspace]);
 
   useEffect(() => {
     if (!conversation_id) return;

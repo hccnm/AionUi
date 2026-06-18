@@ -207,7 +207,7 @@ const CronJobSiderItem: React.FC<CronJobSiderItemProps> = ({
     orderedItems: orderedChildConversations,
     sensors,
     handleDragEnd,
-  } = useStoredSiderOrder({
+  } = useStoredSiderOrder<TChatConversation>({
     items: childConversations,
     storageKey: buildCronConversationOrderKey(job.id),
     getId: getConversationId,

@@ -44,6 +44,7 @@ const ArcoConfig: React.FC<PropsWithChildren> = ({ children }) => (
 const MainApp = () => {
   const { ready, status } = useAuth();
   const [configReady, setConfigReady] = useState(false);
+  const isAuthenticated = status === 'authenticated';
 
   useEffect(() => {
     let cancelled = false;
@@ -73,15 +74,17 @@ const MainApp = () => {
     };
   }, [status]);
 
-  if (!ready || (status === 'authenticated' && !configReady)) {
+  if (!ready || (isAuthenticated && !configReady)) {
     return null;
   }
 
-  return (
-    <ConversationHistoryProvider>
-      <AppRouter />
-    </ConversationHistoryProvider>
-  );
+  const appRouter = <AppRouter />;
+
+  if (!isAuthenticated) {
+    return appRouter;
+  }
+
+  return <ConversationHistoryProvider>{appRouter}</ConversationHistoryProvider>;
 };
 
 async function bootstrap() {

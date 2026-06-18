@@ -5,6 +5,7 @@
  */
 
 import type { Assistant } from '@/common/types/agent/assistantTypes';
+import { ipcBridge } from '@/common';
 import { ASSISTANTS_SWR_KEY, fetchAssistantsCatalog } from '@/renderer/hooks/assistant/assistantsCatalog';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import { useAgents } from '@/renderer/hooks/agent/useAgents';

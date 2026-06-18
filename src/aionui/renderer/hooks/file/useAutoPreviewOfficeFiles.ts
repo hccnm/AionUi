@@ -13,6 +13,17 @@ import { useCallback, useEffect, useRef } from 'react';
 
 const OFFICE_OPEN_DELAY_MS = 1000;
 const OFFICE_CONTENT_TYPES = new Set(['ppt', 'word', 'excel']);
+const OFFICE_WATCH_STOP_DELAY_MS = 200;
+
+type OfficeWatchSession = {
+  refCount: number;
+  knownOfficeFiles: Set<string>;
+  startPromise: Promise<Set<string>> | null;
+  stopTimer: ReturnType<typeof setTimeout> | null;
+  started: boolean;
+};
+
+const officeWatchSessions = new Map<string, OfficeWatchSession>();
 
 const normalizeWatchPath = (value: string): string => {
   const normalized = value.replaceAll('\\', '/');
@@ -23,6 +34,21 @@ const normalizeWatchPath = (value: string): string => {
   if (normalized.startsWith('/private/tmp/')) return normalized.slice('/private'.length);
 
   return normalized;
+};
+
+const getOfficeWatchSession = (workspace: string): OfficeWatchSession => {
+  let session = officeWatchSessions.get(workspace);
+  if (!session) {
+    session = {
+      refCount: 0,
+      knownOfficeFiles: new Set(),
+      startPromise: null,
+      stopTimer: null,
+      started: false,
+    };
+    officeWatchSessions.set(workspace, session);
+  }
+  return session;
 };
 
 /**
@@ -42,6 +68,13 @@ export const useAutoPreviewOfficeFiles = (
   const openTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const workspace = conversation?.workspace?.trim() ? conversation.workspace : undefined;
   const normalizedWorkspace = workspace ? normalizeWatchPath(workspace) : undefined;
+  const findPreviewTabRef = useRef(findPreviewTab);
+  const openPreviewRef = useRef(openPreview);
+
+  useEffect(() => {
+    findPreviewTabRef.current = findPreviewTab;
+    openPreviewRef.current = openPreview;
+  }, [findPreviewTab, openPreview]);
 
   const clearPendingOpenTimers = useCallback(() => {
     for (const timer of openTimersRef.current.values()) {
@@ -59,18 +92,18 @@ export const useAutoPreviewOfficeFiles = (
       const { contentType } = getFileTypeInfo(file_path);
       if (!OFFICE_CONTENT_TYPES.has(contentType)) return;
 
-      const file_name = file_path.split(/[\\/]/).pop() ?? file_path;
+        const file_name = file_path.split(/[\\/]/).pop() ?? file_path;
       const timer = setTimeout(() => {
         openTimersRef.current.delete(normalizedFilePath);
 
-        if (!findPreviewTab(contentType, '', { file_path, file_name })) {
-          openPreview('', contentType, { file_path, file_name, title: file_name, workspace, editable: false });
+        if (!findPreviewTabRef.current(contentType, '', { file_path, file_name })) {
+          openPreviewRef.current('', contentType, { file_path, file_name, title: file_name, workspace, editable: false });
         }
       }, OFFICE_OPEN_DELAY_MS);
 
       openTimersRef.current.set(normalizedFilePath, timer);
     },
-    [findPreviewTab, openPreview, workspace]
+    [workspace]
   );
 
   useEffect(() => {
@@ -82,17 +115,40 @@ export const useAutoPreviewOfficeFiles = (
     }
 
     let cancelled = false;
+    const session = getOfficeWatchSession(workspace);
+    session.refCount += 1;
+    if (session.stopTimer) {
+      clearTimeout(session.stopTimer);
+      session.stopTimer = null;
+    }
+
     const primeOfficeWatch = async () => {
       try {
-        await ipcBridge.workspaceOfficeWatch.start.invoke({ workspace });
-        const currentFiles = await ipcBridge.fs.listWorkspaceFiles.invoke({ root: workspace });
+        if (!session.started && !session.startPromise) {
+          session.startPromise = (async () => {
+            await ipcBridge.workspaceOfficeWatch.start.invoke({ workspace });
+            const currentFiles = await ipcBridge.fs.listWorkspaceFiles.invoke({ root: workspace });
+            const knownFiles = new Set(
+              currentFiles
+                .map((file) => file.fullPath)
+                .map((file_path) => normalizeWatchPath(file_path))
+                .filter((file_path) => OFFICE_CONTENT_TYPES.has(getFileTypeInfo(file_path).contentType))
+            );
+            session.knownOfficeFiles = knownFiles;
+            session.started = true;
+            return knownFiles;
+          })().finally(() => {
+            session.startPromise = null;
+          });
+        }
+
+        const knownFiles = session.started
+          ? session.knownOfficeFiles
+          : session.startPromise
+            ? await session.startPromise
+            : new Set<string>();
         if (cancelled) return;
-        knownOfficeFilesRef.current = new Set(
-          currentFiles
-            .map((file) => file.fullPath)
-            .map((file_path) => normalizeWatchPath(file_path))
-            .filter((file_path) => OFFICE_CONTENT_TYPES.has(getFileTypeInfo(file_path).contentType))
-        );
+        knownOfficeFilesRef.current = new Set(knownFiles);
       } catch {
         // Ignore watcher/bootstrap failures; the hook should stay inert rather than noisy.
       }
@@ -109,6 +165,7 @@ export const useAutoPreviewOfficeFiles = (
         if (knownOfficeFilesRef.current.has(normalizedFilePath)) return;
 
         knownOfficeFilesRef.current.add(normalizedFilePath);
+        session.knownOfficeFiles.add(normalizedFilePath);
         openOfficePreview(event.file_path);
       } catch (error) {
         console.error('[useAutoPreviewOfficeFiles] failed to process fileAdded event', error, event);
@@ -120,7 +177,21 @@ export const useAutoPreviewOfficeFiles = (
       unsubscribeFileAdded();
       clearPendingOpenTimers();
       knownOfficeFilesRef.current.clear();
-      void ipcBridge.workspaceOfficeWatch.stop.invoke({ workspace }).catch(() => {});
+      session.refCount = Math.max(0, session.refCount - 1);
+      if (session.refCount > 0) {
+        return;
+      }
+
+      session.stopTimer = setTimeout(() => {
+        session.stopTimer = null;
+        if (session.refCount > 0) {
+          return;
+        }
+        session.knownOfficeFiles.clear();
+        session.started = false;
+        session.startPromise = null;
+        void ipcBridge.workspaceOfficeWatch.stop.invoke({ workspace }).catch(() => {});
+      }, OFFICE_WATCH_STOP_DELAY_MS);
     };
   }, [clearPendingOpenTimers, enabled, normalizedWorkspace, openOfficePreview, workspace]);
 };

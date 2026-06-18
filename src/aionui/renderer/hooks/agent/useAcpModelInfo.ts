@@ -13,6 +13,7 @@ import { savePreferredModelId } from '@/renderer/pages/guid/hooks/agentSelection
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents, type AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import useSWR, { mutate as mutateGlobal } from 'swr';
+import { runSingleFlight } from '@/renderer/pages/conversation/utils/singleFlight';
 
 type AcpModelInfoKey = readonly ['acp-model-info', string];
 type AcpModelInfoFetchResult = {
@@ -21,6 +22,7 @@ type AcpModelInfoFetchResult = {
 };
 
 const getAcpModelInfoKey = (conversation_id: string): AcpModelInfoKey => ['acp-model-info', conversation_id] as const;
+const acpModelInfoInflight = new Map<string, Promise<AcpModelInfoFetchResult>>();
 
 const summarizeModelInfo = (info: AcpModelInfo | null | undefined) => {
   if (!info) return null;
@@ -45,22 +47,24 @@ const logAcpModelInfo = (event: string, data: Record<string, unknown>) => {
 };
 
 const fetchAcpModelInfoResult = async ([, conversation_id]: AcpModelInfoKey): Promise<AcpModelInfoFetchResult> => {
-  try {
-    const result = await ipcBridge.acpConversation.getModel.invoke({ conversation_id });
-    return { model_info: result?.model_info ?? null, missing_active_session: false };
-  } catch (error) {
-    const missingActiveSession = isBackendHttpError(error) && error.status === 404;
-    if (!missingActiveSession) {
-      logAcpModelInfo('fetch_failed', {
-        conversation_id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  return runSingleFlight(acpModelInfoInflight, conversation_id, async () => {
+    try {
+      const result = await ipcBridge.acpConversation.getModel.invoke({ conversation_id });
+      return { model_info: result?.model_info ?? null, missing_active_session: false };
+    } catch (error) {
+      const missingActiveSession = isBackendHttpError(error) && error.status === 404;
+      if (!missingActiveSession) {
+        logAcpModelInfo('fetch_failed', {
+          conversation_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      // 404 before warmup or between ACP evict/rebuild. reloadModelInfo must
+      // not fall back directly; the no-cache fallback effect handles genuine
+      // first-load cases without overwriting an established model cache.
+      return { model_info: null, missing_active_session: missingActiveSession };
     }
-    // 404 before warmup or between ACP evict/rebuild. reloadModelInfo must
-    // not fall back directly; the no-cache fallback effect handles genuine
-    // first-load cases without overwriting an established model cache.
-    return { model_info: null, missing_active_session: missingActiveSession };
-  }
+  });
 };
 
 const fetchAcpModelInfo = async (key: AcpModelInfoKey): Promise<AcpModelInfo | null> =>

@@ -13,6 +13,7 @@ import {
   normalizeAgentStreamError,
   preferTextMessageVersion,
 } from '@/common/chat/chatLib';
+import { runSingleFlight } from '@/renderer/pages/conversation/utils/singleFlight';
 import { useCallback, useEffect, useRef } from 'react';
 import { createContext } from '@renderer/utils/ui/createContext';
 
@@ -22,6 +23,7 @@ const [useMessageListLoading, MessageListLoadingProvider, useUpdateMessageListLo
 const [useChatKey, ChatKeyProvider] = createContext('');
 
 const beforeUpdateMessageListStack: Array<(list: TMessage[]) => TMessage[]> = [];
+const messageListInflight = new Map<string, Promise<TMessage[]>>();
 
 // 消息索引缓存类型定义
 // Message index cache type definitions
@@ -587,46 +589,50 @@ export const useMessageLstCache = (key: string) => {
   const update = useUpdateMessageList();
   const setLoading = useUpdateMessageListLoading();
   const loadMessages = useCallback(async (): Promise<TMessage[]> => {
-    const result = await ipcBridge.database.getConversationMessages.invoke({
-      conversation_id: key,
-      page: 0,
-      page_size: 10000,
-      content_mode: 'compact',
-    });
-    const messages = result?.items?.map(normalizeDbMessage);
-    if (messages && Array.isArray(messages)) {
-      update((currentList) => {
-        if (!currentList.length) return messages;
-        const sameConversation = currentList.filter((m) => m.conversation_id === key);
-        if (!sameConversation.length) return messages;
-        const dbIds = new Set(messages.map((m) => m.id));
-        const dbMsgIds = new Set(messages.map((m) => m.msg_id).filter(Boolean));
-
-        // Build a map of streaming messages by msg_id for content-length comparison.
-        // During streaming, the DB may have an older snapshot (due to 2000ms save debounce),
-        // so we keep whichever version has more content to avoid losing streamed data.
-        const streamingByMsgId = new Map<string, IMessageText>();
-        for (const m of sameConversation) {
-          if (m.msg_id && m.type === 'text' && dbMsgIds.has(m.msg_id)) {
-            streamingByMsgId.set(m.msg_id, m);
-          }
-        }
-
-        // Replace DB messages with streaming versions when streaming has more content
-        const mergedMessages = messages.map((dbMsg) => {
-          if (!dbMsg.msg_id || dbMsg.type !== 'text') return dbMsg;
-          const streamMsg = streamingByMsgId.get(dbMsg.msg_id);
-          if (!streamMsg) return dbMsg;
-          return preferTextMessageVersion(dbMsg, streamMsg);
-        });
-
-        const streamingOnly = sameConversation.filter((m) => !dbIds.has(m.id) && !(m.msg_id && dbMsgIds.has(m.msg_id)));
-        if (!streamingOnly.length && !streamingByMsgId.size) return messages;
-        return [...mergedMessages, ...streamingOnly];
+    return runSingleFlight(messageListInflight, key, async () => {
+      const result = await ipcBridge.database.getConversationMessages.invoke({
+        conversation_id: key,
+        page: 0,
+        page_size: 10000,
+        content_mode: 'compact',
       });
-      return messages;
-    }
-    return [];
+      const messages = result?.items?.map(normalizeDbMessage);
+      if (messages && Array.isArray(messages)) {
+        update((currentList) => {
+          if (!currentList.length) return messages;
+          const sameConversation = currentList.filter((m) => m.conversation_id === key);
+          if (!sameConversation.length) return messages;
+          const dbIds = new Set(messages.map((m) => m.id));
+          const dbMsgIds = new Set(messages.map((m) => m.msg_id).filter(Boolean));
+
+          // Build a map of streaming messages by msg_id for content-length comparison.
+          // During streaming, the DB may have an older snapshot (due to 2000ms save debounce),
+          // so we keep whichever version has more content to avoid losing streamed data.
+          const streamingByMsgId = new Map<string, IMessageText>();
+          for (const m of sameConversation) {
+            if (m.msg_id && m.type === 'text' && dbMsgIds.has(m.msg_id)) {
+              streamingByMsgId.set(m.msg_id, m);
+            }
+          }
+
+          // Replace DB messages with streaming versions when streaming has more content
+          const mergedMessages = messages.map((dbMsg) => {
+            if (!dbMsg.msg_id || dbMsg.type !== 'text') return dbMsg;
+            const streamMsg = streamingByMsgId.get(dbMsg.msg_id);
+            if (!streamMsg) return dbMsg;
+            return preferTextMessageVersion(dbMsg, streamMsg);
+          });
+
+          const streamingOnly = sameConversation.filter(
+            (m) => !dbIds.has(m.id) && !(m.msg_id && dbMsgIds.has(m.msg_id))
+          );
+          if (!streamingOnly.length && !streamingByMsgId.size) return messages;
+          return [...mergedMessages, ...streamingOnly];
+        });
+        return messages;
+      }
+      return [];
+    });
   }, [key, update]);
 
   useEffect(() => {

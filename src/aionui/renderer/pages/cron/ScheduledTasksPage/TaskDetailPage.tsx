@@ -372,13 +372,15 @@ const TaskDetailPage: React.FC = () => {
         </div>
       </div>
 
-      <CreateTaskDialog
-        visible={editDialogVisible}
-        onClose={() => {
-          setEditDialogVisible(false);
-        }}
-        editJob={job ?? undefined}
-      />
+      {editDialogVisible ? (
+        <CreateTaskDialog
+          visible
+          onClose={() => {
+            setEditDialogVisible(false);
+          }}
+          editJob={job ?? undefined}
+        />
+      ) : null}
     </div>
   );
 };

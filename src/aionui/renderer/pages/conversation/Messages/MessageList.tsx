@@ -96,7 +96,7 @@ const highlightStyle: React.CSSProperties = {
   borderRadius: '12px',
 };
 
-const getUnhandledMessageType = (_message: never): string => 'unknown';
+const getUnhandledMessageType = (message: TMessage): string => String(message.type ?? 'unknown');
 
 // Image preview context
 export const ImagePreviewContext = createContext<{ inPreviewGroup: boolean }>({ inPreviewGroup: false });

@@ -404,14 +404,21 @@ const Layout: React.FC<{
   return (
     <LayoutContext.Provider value={{ isMobile, siderCollapsed: collapsed, setSiderCollapsed: setCollapsed }}>
       <NavigationHistoryProvider>
-        <div className='app-shell flex flex-col size-full min-h-0'>
+        <div
+          className='app-shell flex flex-col size-full min-h-0'
+          style={
+            {
+              '--app-message-offset': !isMobile && !collapsed ? `${siderWidth + 6}px` : '0px',
+            } as React.CSSProperties
+          }
+        >
           <Titlebar workspaceAvailable={workspaceAvailable} />
           {/* 移动端左侧边栏蒙板 / Mobile left sider backdrop */}
           {isMobile && !collapsed && (
             <div className='fixed inset-0 bg-black/30 z-90' onClick={() => setCollapsed(true)} aria-hidden='true' />
           )}
 
-          <ArcoLayout className={'size-full layout flex-1 min-h-0'}>
+          <ArcoLayout className={'w-full layout flex-1 min-h-0'}>
             <ArcoLayout.Sider
               collapsedWidth={isMobile ? 0 : 0}
               collapsed={collapsed}

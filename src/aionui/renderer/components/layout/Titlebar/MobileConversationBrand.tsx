@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ipcBridge } from '@/common';
 import { AgentLogoIcon } from '@/renderer/components/agent/AgentBadge';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
+import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import React from 'react';
 import useSWR from 'swr';
 
@@ -17,8 +17,8 @@ type MobileConversationBrandProps = {
 
 const MobileConversationBrand: React.FC<MobileConversationBrandProps> = ({ conversation_id, fallbackTitle }) => {
   const { data: conversation } = useSWR(
-    conversation_id ? `mobile-titlebar.conversation.${conversation_id}` : null,
-    () => ipcBridge.conversation.get.invoke({ id: conversation_id })
+    conversation_id ? `conversation/${conversation_id}` : null,
+    () => getConversationOrNull(conversation_id)
   );
   const { info: presetAssistant } = usePresetAssistantInfo(conversation || undefined);
 

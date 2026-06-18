@@ -222,7 +222,7 @@ const ScheduledTasksPage: React.FC = () => {
           </div>
         )}
 
-        <CreateTaskDialog visible={createDialogVisible} onClose={() => setCreateDialogVisible(false)} />
+        {createDialogVisible ? <CreateTaskDialog visible onClose={() => setCreateDialogVisible(false)} /> : null}
       </div>
     </div>
   );

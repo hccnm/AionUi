@@ -111,7 +111,7 @@ type AionSelectComponent = React.ForwardRefExoticComponent<AionSelectProps & Rea
 };
 
 const InternalSelect = React.forwardRef<SelectHandle, AionSelectProps>(
-  ({ className, getPopupContainer, size = 'middle', ...rest }, ref) => {
+  ({ className, getPopupContainer, size = 'middle' as AionSelectSize, ...rest }, ref) => {
     const normalizedSize = mapSizeToNative(size);
     return (
       <Select

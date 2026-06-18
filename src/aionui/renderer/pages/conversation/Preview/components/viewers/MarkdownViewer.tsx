@@ -486,7 +486,6 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
                   // 代码高亮 / Code highlighting
                   return language ? (
                     <SyntaxHighlighter
-                      // @ts-expect-error - style 属性类型定义问题
                       style={codeTheme}
                       language={language}
                       PreTag='div'

@@ -17,6 +17,9 @@ const isJobErrorLike = (job: ICronJob): boolean => {
 
 let allCronJobsCache: ICronJob[] | null = null;
 let allCronJobsPromise: Promise<ICronJob[]> | null = null;
+const cronJobsByConversationCache = new Map<string, { value: ICronJob[]; expiresAt: number }>();
+const cronJobsByConversationPromise = new Map<string, Promise<ICronJob[]>>();
+const CRON_JOBS_BY_CONVERSATION_TTL_MS = 1500;
 
 async function loadAllCronJobsShared(force = false): Promise<ICronJob[]> {
   if (!force && allCronJobsCache) {
@@ -44,6 +47,35 @@ async function loadAllCronJobsShared(force = false): Promise<ICronJob[]> {
 function updateAllCronJobsCache(updater: (jobs: ICronJob[]) => ICronJob[]) {
   if (!allCronJobsCache) return;
   allCronJobsCache = updater(allCronJobsCache);
+}
+
+async function loadCronJobsByConversationShared(conversation_id: string, force = false): Promise<ICronJob[]> {
+  const cached = cronJobsByConversationCache.get(conversation_id);
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  const inflight = cronJobsByConversationPromise.get(conversation_id);
+  if (!force && inflight) {
+    return inflight;
+  }
+
+  const promise = ipcBridge.cron.listJobsByConversation
+    .invoke({ conversation_id })
+    .then((jobs) => repairCronJobTimeZones(jobs || []))
+    .then((jobs) => {
+      cronJobsByConversationCache.set(conversation_id, {
+        value: jobs,
+        expiresAt: Date.now() + CRON_JOBS_BY_CONVERSATION_TTL_MS,
+      });
+      return jobs;
+    })
+    .finally(() => {
+      cronJobsByConversationPromise.delete(conversation_id);
+    });
+
+  cronJobsByConversationPromise.set(conversation_id, promise);
+  return promise;
 }
 
 /**
@@ -145,8 +177,7 @@ export function useCronJobs(conversation_id?: string) {
     setError(null);
 
     try {
-      const result = await ipcBridge.cron.listJobsByConversation.invoke({ conversation_id });
-      setJobs(await repairCronJobTimeZones(result || []));
+      setJobs(await loadCronJobsByConversationShared(conversation_id));
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch cron jobs'));
       setJobs([]);
@@ -165,15 +196,30 @@ export function useCronJobs(conversation_id?: string) {
     () => ({
       onJobCreated: (job: ICronJob) => {
         if (job.metadata.conversation_id === conversation_id) {
+          const cached = cronJobsByConversationCache.get(conversation_id);
+          if (cached) {
+            cached.value = cached.value.some((item) => item.id === job.id) ? cached.value : [...cached.value, job];
+            cached.expiresAt = Date.now() + CRON_JOBS_BY_CONVERSATION_TTL_MS;
+          }
           setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev : [...prev, job]));
         }
       },
       onJobUpdated: (job: ICronJob) => {
         if (job.metadata.conversation_id === conversation_id) {
+          const cached = cronJobsByConversationCache.get(conversation_id);
+          if (cached) {
+            cached.value = cached.value.map((item) => (item.id === job.id ? job : item));
+            cached.expiresAt = Date.now() + CRON_JOBS_BY_CONVERSATION_TTL_MS;
+          }
           setJobs((prev) => prev.map((j) => (j.id === job.id ? job : j)));
         }
       },
       onJobRemoved: ({ job_id }: { job_id: string }) => {
+        const cached = conversation_id ? cronJobsByConversationCache.get(conversation_id) : null;
+        if (cached) {
+          cached.value = cached.value.filter((item) => item.id !== job_id);
+          cached.expiresAt = Date.now() + CRON_JOBS_BY_CONVERSATION_TTL_MS;
+        }
         setJobs((prev) => prev.filter((j) => j.id !== job_id));
       },
     }),

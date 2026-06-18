@@ -103,7 +103,7 @@ export const useGuidMention = ({
   const filteredMentionOptions = useMemo(() => {
     if (!mentionQuery) return mentionOptions;
     const query = mentionQuery.toLowerCase();
-    return mentionOptions.filter((option) => Array.from(option.tokens).some((token) => token.startsWith(query)));
+    return mentionOptions.filter((option) => [...option.tokens].some((token) => token.startsWith(query)));
   }, [mentionOptions, mentionQuery]);
 
   const stripMentionToken = useCallback(

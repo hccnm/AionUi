@@ -9,7 +9,7 @@ import { transformMessage } from '@/common/chat/chatLib';
 import type { AvailableCommand } from '@/common/chat/chatLib';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
-import type { TokenUsageData } from '@/common/config/storage';
+import type { TChatConversation, TokenUsageData } from '@/common/config/storage';
 import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import { isConversationProcessing } from '@/renderer/pages/conversation/utils/conversationRuntime';
@@ -33,7 +33,10 @@ export type UseAcpMessageReturn = {
   fetchSlashCommands: () => void;
 };
 
-export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: boolean }): UseAcpMessageReturn => {
+export const useAcpMessage = (
+  conversation_id: string,
+  options?: { skipWarmup?: boolean; initialConversation?: TChatConversation }
+): UseAcpMessageReturn => {
   const addOrUpdateMessage = useAddOrUpdateMessage();
   const [running, setRunning] = useState(false);
   const [hasHydratedRunningState, setHasHydratedRunningState] = useState(false);
@@ -482,7 +485,8 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     setAiProcessing(false);
     aiProcessingRef.current = false;
 
-    void getConversationOrNull(conversation_id)
+    void Promise.resolve(options?.initialConversation ?? null)
+      .then((initialConversation) => initialConversation ?? getConversationOrNull(conversation_id))
       .then((res) => {
         if (cancelled) {
           return;
@@ -535,7 +539,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     return () => {
       cancelled = true;
     };
-  }, [conversation_id]);
+  }, [conversation_id, options?.initialConversation]);
 
   // Fetch slash commands via HTTP after warmup completes.
   // WebSocket push of available_commands arrives during warmup when no

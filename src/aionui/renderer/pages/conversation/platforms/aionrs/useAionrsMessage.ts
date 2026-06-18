@@ -26,6 +26,7 @@ export const useAionrsMessage = (
   options?: {
     onError?: (message: IResponseMessage) => void;
     onConfigChanged?: (capabilities: Record<string, unknown>) => void;
+    initialConversation?: TChatConversation;
   }
 ) => {
   const onError = options?.onError;
@@ -353,43 +354,45 @@ export const useAionrsMessage = (
 
     // Check actual conversation status from backend before resetting all running states
     // to avoid flicker when switching to a running conversation
-    void getConversationOrNull(conversation_id).then((res) => {
-      if (cancelled) {
-        return;
-      }
+    void Promise.resolve(options?.initialConversation ?? null)
+      .then((initialConversation) => initialConversation ?? getConversationOrNull(conversation_id))
+      .then((res) => {
+        if (cancelled) {
+          return;
+        }
 
-      if (!res) {
-        setStreamRunning(false);
-        streamRunningRef.current = false;
+        if (!res) {
+          setStreamRunning(false);
+          streamRunningRef.current = false;
+          setHasActiveTools(false);
+          hasActiveToolsRef.current = false;
+          setWaitingResponse(false);
+          waitingResponseRef.current = false;
+          setHasHydratedRunningState(true);
+          return;
+        }
+        const isRunning = isConversationProcessing(res);
+        setStreamRunning(isRunning);
+        streamRunningRef.current = isRunning;
+        // Reset tool states - they will be restored by incoming messages if still active
         setHasActiveTools(false);
         hasActiveToolsRef.current = false;
-        setWaitingResponse(false);
-        waitingResponseRef.current = false;
-        setHasHydratedRunningState(true);
-        return;
-      }
-      const isRunning = isConversationProcessing(res);
-      setStreamRunning(isRunning);
-      streamRunningRef.current = isRunning;
-      // Reset tool states - they will be restored by incoming messages if still active
-      setHasActiveTools(false);
-      hasActiveToolsRef.current = false;
-      setWaitingResponse(isRunning);
-      waitingResponseRef.current = isRunning;
-      // Load persisted token usage stats
-      if (res.type === 'aionrs' && res.extra?.last_token_usage) {
-        const { last_token_usage } = res.extra;
-        if (last_token_usage.total_tokens > 0) {
-          setTokenUsage(last_token_usage);
+        setWaitingResponse(isRunning);
+        waitingResponseRef.current = isRunning;
+        // Load persisted token usage stats
+        if (res.type === 'aionrs' && res.extra?.last_token_usage) {
+          const { last_token_usage } = res.extra;
+          if (last_token_usage.total_tokens > 0) {
+            setTokenUsage(last_token_usage);
+          }
         }
-      }
-      setHasHydratedRunningState(true);
-    });
+        setHasHydratedRunningState(true);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [conversation_id]);
+  }, [conversation_id, options?.initialConversation]);
 
   const resetState = useCallback(() => {
     setWaitingResponse(false);

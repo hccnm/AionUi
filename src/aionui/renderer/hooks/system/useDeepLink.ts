@@ -7,6 +7,7 @@
 import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ipcBridge } from '@/common';
+import { isElectronDesktop } from '@/renderer/utils/platform';
 
 /**
  * Deep link event payload from main process
@@ -88,6 +89,10 @@ export const useDeepLink = () => {
   );
 
   useEffect(() => {
+    if (!isElectronDesktop()) {
+      return undefined;
+    }
+
     return ipcBridge.deepLink.received.on(handler);
   }, [handler]);
 };

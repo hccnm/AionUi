@@ -6,10 +6,12 @@
 
 import { ipcBridge } from '@/common';
 import type { IConfirmation, IMessagePermission, TMessage } from '@/common/chat/chatLib';
+import { runSingleFlight } from '@/renderer/pages/conversation/utils/singleFlight';
 import { useEffect } from 'react';
 import { useUpdateMessageList } from './hooks';
 
 export const pendingConfirmationMsgId = (confirmationId: string) => `confirmation:${confirmationId}`;
+const pendingConfirmationsInflight = new Map<string, Promise<IConfirmation<unknown>[] | null | undefined>>();
 
 export function buildPendingConfirmationMessage(
   conversation_id: string,
@@ -50,8 +52,9 @@ export function usePendingConfirmationsRecovery(conversation_id: string) {
     if (!conversation_id) return;
     let cancelled = false;
 
-    void ipcBridge.conversation.confirmation.list
-      .invoke({ conversation_id })
+    void runSingleFlight(pendingConfirmationsInflight, conversation_id, () =>
+      ipcBridge.conversation.confirmation.list.invoke({ conversation_id })
+    )
       .then((confirmations) => {
         if (cancelled) return;
         updateMessageList((list) => {

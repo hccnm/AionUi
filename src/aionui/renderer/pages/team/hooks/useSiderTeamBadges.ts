@@ -49,7 +49,7 @@ export function useSiderTeamBadges(teams: TTeam[]): Map<string, number> {
       const team_id = cidToTeamId.get(conversation_id);
       if (!team_id) return;
       setCounts((prev) => {
-        const next = new Map(prev);
+        const next = new Map<string, number>(prev);
         next.set(team_id, Math.max(0, (next.get(team_id) ?? 0) + delta));
         return next;
       });

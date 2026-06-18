@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IConversationMcpStatus } from '@/common/config/storage';
+import type { IConversationMcpStatus, TChatConversation } from '@/common/config/storage';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
 import { useTeamPermission } from '@/renderer/pages/team/hooks/TeamPermissionContext';
 import FlexFullContainer from '@renderer/components/layout/FlexFullContainer';
@@ -24,6 +24,7 @@ import { useAcpMessage } from './useAcpMessage';
 
 const AcpChat: React.FC<{
   conversation_id: string;
+  conversation?: TChatConversation;
   workspace?: string;
   backend: string;
   session_mode?: string;
@@ -36,6 +37,7 @@ const AcpChat: React.FC<{
   loadedMcpStatuses?: IConversationMcpStatus[];
 }> = ({
   conversation_id,
+  conversation,
   workspace,
   backend,
   session_mode,
@@ -50,7 +52,10 @@ const AcpChat: React.FC<{
   useMessageLstCache(conversation_id);
   usePendingConfirmationsRecovery(conversation_id);
   const teamPermission = useTeamPermission();
-  const messageState = useAcpMessage(conversation_id, { skipWarmup: Boolean(teamPermission) });
+  const messageState = useAcpMessage(conversation_id, {
+    skipWarmup: Boolean(teamPermission),
+    initialConversation: conversation,
+  });
 
   return (
     <ConversationProvider

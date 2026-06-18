@@ -7,9 +7,17 @@
 import { ipcBridge } from '@/common';
 import type { CompareResult, FileChangeInfo, SnapshotInfo } from '@/common/types/platform/fileSnapshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { WorkspaceTab } from '../types';
 
 type UseFileChangesParams = {
   workspace: string;
+  enabled?: boolean;
+};
+
+type FileSnapshotEnableGuard = {
+  workspace: string;
+  activeTab: WorkspaceTab;
+  isTemporaryWorkspace: boolean;
 };
 
 type UseFileChangesReturn = {
@@ -27,50 +35,86 @@ type UseFileChangesReturn = {
   resetFile: (file_path: string, operation: FileChangeInfo['operation']) => Promise<void>;
 };
 
-export function useFileChanges({ workspace }: UseFileChangesParams): UseFileChangesReturn {
+export function shouldEnableFileSnapshot({
+  workspace,
+  activeTab,
+  isTemporaryWorkspace,
+}: FileSnapshotEnableGuard): boolean {
+  return Boolean(workspace) && activeTab === 'changes' && !isTemporaryWorkspace;
+}
+
+export function useFileChanges({ workspace, enabled = false }: UseFileChangesParams): UseFileChangesReturn {
   const [result, setResult] = useState<CompareResult>({ staged: [], unstaged: [] });
   const [loading, setLoading] = useState(false);
   const [snapshotInfo, setSnapshotInfo] = useState<SnapshotInfo | null>(null);
   const initializedRef = useRef(false);
+  const initPromiseRef = useRef<Promise<boolean> | null>(null);
+  const lifecycleIdRef = useRef(0);
 
   useEffect(() => {
-    if (!workspace) return;
-
+    lifecycleIdRef.current += 1;
     initializedRef.current = false;
+    initPromiseRef.current = null;
     setResult({ staged: [], unstaged: [] });
+    setLoading(false);
     setSnapshotInfo(null);
 
-    ipcBridge.fileSnapshot.init
-      .invoke({ workspace })
-      .then((info) => {
-        setSnapshotInfo(info);
-        initializedRef.current = true;
-      })
-      .catch((err) => {
-        console.error('[useFileChanges] Failed to init snapshot:', err);
-      });
-
     return () => {
+      lifecycleIdRef.current += 1;
+      initPromiseRef.current = null;
+      if (!workspace || !initializedRef.current) return;
+
+      initializedRef.current = false;
       ipcBridge.fileSnapshot.dispose.invoke({ workspace }).catch(() => {});
     };
-  }, [workspace]);
+  }, [enabled, workspace]);
+
+  const ensureInitialized = useCallback(async (): Promise<boolean> => {
+    if (!workspace || !enabled) return false;
+    if (initializedRef.current) return true;
+    if (initPromiseRef.current) return initPromiseRef.current;
+
+    const lifecycleId = lifecycleIdRef.current;
+    initPromiseRef.current = ipcBridge.fileSnapshot.init
+      .invoke({ workspace })
+      .then((info) => {
+        if (lifecycleId !== lifecycleIdRef.current) return false;
+        setSnapshotInfo(info);
+        initializedRef.current = true;
+        return true;
+      })
+      .catch((err) => {
+        if (lifecycleId === lifecycleIdRef.current) {
+          console.error('[useFileChanges] Failed to init snapshot:', err);
+        }
+        return false;
+      })
+      .finally(() => {
+        if (lifecycleId === lifecycleIdRef.current) {
+          initPromiseRef.current = null;
+        }
+      });
+
+    return initPromiseRef.current;
+  }, [enabled, workspace]);
 
   // Silent refresh: update data without showing loading spinner (used after git operations)
   const silentRefresh = useCallback(async () => {
-    if (!workspace || !initializedRef.current) return;
+    if (!(await ensureInitialized())) return;
     try {
       const res = await ipcBridge.fileSnapshot.compare.invoke({ workspace });
       setResult(res);
     } catch (err) {
       console.error('[useFileChanges] Failed to compare:', err);
     }
-  }, [workspace]);
+  }, [ensureInitialized, workspace]);
 
   // Full refresh with loading indicator (used for manual refresh button)
   const refreshChanges = useCallback(async () => {
-    if (!workspace || !initializedRef.current) return;
+    if (!workspace || !enabled) return;
     setLoading(true);
     try {
+      if (!(await ensureInitialized())) return;
       const res = await ipcBridge.fileSnapshot.compare.invoke({ workspace });
       setResult(res);
     } catch (err) {
@@ -78,7 +122,7 @@ export function useFileChanges({ workspace }: UseFileChangesParams): UseFileChan
     } finally {
       setLoading(false);
     }
-  }, [workspace]);
+  }, [enabled, ensureInitialized, workspace]);
 
   const stageFile = useCallback(
     async (file_path: string) => {

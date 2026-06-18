@@ -193,7 +193,7 @@ const FeedbackReportModal: React.FC<FeedbackReportModalProps> = ({
       Sentry.withScope((scope) => {
         scope.setTag('type', 'user-feedback');
         scope.setTag('module', module);
-        Object.entries(feedbackTags ?? {}).forEach(([key, value]) => {
+        (Object.entries(feedbackTags ?? {}) as Array<[string, string]>).forEach(([key, value]) => {
           if (value.trim()) {
             scope.setTag(key, value);
           }

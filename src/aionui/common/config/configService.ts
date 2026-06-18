@@ -50,6 +50,14 @@ async function fetchJson<T>(method: string, path: string, body?: unknown): Promi
   return json as T;
 }
 
+function isUnauthorizedConfigBootstrapError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /ConfigService GET \/api\/settings\/client failed \((401|403)\)/.test(error.message);
+}
+
 class ConfigServiceImpl {
   private cache = new Map<string, unknown>();
   private subscribers = new Map<string, Set<Subscriber>>();
@@ -62,7 +70,18 @@ class ConfigServiceImpl {
   initialize(): Promise<void> {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
-      const data = await fetchJson<Record<string, unknown>>('GET', '/api/settings/client');
+      let data: Record<string, unknown> | undefined;
+
+      try {
+        data = await fetchJson<Record<string, unknown>>('GET', '/api/settings/client');
+      } catch (error) {
+        // Login/bootstrap routes still render theme/i18n before auth is ready.
+        // Avoid turning that expected 401/403 into noisy startup failures.
+        if (!isUnauthorizedConfigBootstrapError(error)) {
+          throw error;
+        }
+      }
+
       this.cache.clear();
       if (data) {
         for (const [key, value] of Object.entries(data)) {

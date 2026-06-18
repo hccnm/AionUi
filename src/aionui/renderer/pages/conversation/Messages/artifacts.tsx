@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { IConversationArtifact, IConversationArtifactStatus } from '@/common/adapter/ipcBridge';
+import { runSingleFlight } from '@/renderer/pages/conversation/utils/singleFlight';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 type ConversationArtifactContextValue = {
@@ -19,6 +20,7 @@ const ConversationArtifactContext = createContext<ConversationArtifactContextVal
   upsertArtifact: () => {},
   updateArtifactStatus: () => {},
 });
+const conversationArtifactsInflight = new Map<string, Promise<IConversationArtifact[]>>();
 
 function upsertArtifacts(
   current: IConversationArtifact[],
@@ -68,8 +70,9 @@ export const ConversationArtifactProvider: React.FC<React.PropsWithChildren<{ co
     let alive = true;
     setArtifacts([]);
 
-    void ipcBridge.conversation.listArtifacts
-      .invoke({ conversation_id })
+    void runSingleFlight(conversationArtifactsInflight, conversation_id, () =>
+      ipcBridge.conversation.listArtifacts.invoke({ conversation_id })
+    )
       .then((items) => {
         if (!alive) return;
         setArtifacts(upsertArtifacts([], items));

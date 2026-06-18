@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
-import { ArrowCircleLeft, ArrowLeft, ArrowRight, ExpandLeft, ExpandRight, Peoples } from '@icon-park/react';
+import { ArrowCircleLeft, ArrowLeft, ArrowRight, Peoples } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { ipcBridge } from '@/common';
 import { TEAM_MODE_ENABLED } from '@/common/config/constants';
+import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import MobileConversationBrand from './MobileConversationBrand';
 import WindowControls from '../WindowControls';
-import { WORKSPACE_STATE_EVENT, dispatchWorkspaceToggleEvent } from '@renderer/utils/workspace/workspaceEvents';
-import type { WorkspaceStateDetail } from '@renderer/utils/workspace/workspaceEvents';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useNavigationHistory } from '@/renderer/hooks/context/NavigationHistoryContext';
 import { isElectronDesktop, isMacOS } from '@/renderer/utils/platform';
@@ -51,7 +50,6 @@ const SidebarIcon: React.FC<{ size?: number; strokeWidth?: number }> = ({ size =
 const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const { t } = useTranslation();
   const appTitle = useMemo(() => 'senmoAI', []);
-  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(true);
   const [mobileCenterTitle, setMobileCenterTitle] = useState(appTitle);
   const [mobileCenterOffset, setMobileCenterOffset] = useState(0);
   const layout = useLayoutContext();
@@ -63,33 +61,10 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const lastNonSettingsPathRef = useRef('/guid');
 
-  // 监听工作空间折叠状态，保持按钮图标一致 / Sync workspace collapsed state for toggle button
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-    const handler = (event: Event) => {
-      const customEvent = event as CustomEvent<WorkspaceStateDetail>;
-      if (typeof customEvent.detail?.collapsed === 'boolean') {
-        setWorkspaceCollapsed(customEvent.detail.collapsed);
-      }
-    };
-    window.addEventListener(WORKSPACE_STATE_EVENT, handler as EventListener);
-    return () => {
-      window.removeEventListener(WORKSPACE_STATE_EVENT, handler as EventListener);
-    };
-  }, []);
-
   const isDesktopRuntime = isElectronDesktop();
   const isMacRuntime = isDesktopRuntime && isMacOS();
   // Windows/Linux 显示自定义窗口按钮；macOS 在标题栏给工作区一个切换入口
   const showWindowControls = isDesktopRuntime && !isMacRuntime;
-  // WebUI 和 macOS 桌面都需要在标题栏放工作区开关
-  const showWorkspaceButton = workspaceAvailable && (!isDesktopRuntime || isMacRuntime);
-
-  const workspaceTooltip = workspaceCollapsed
-    ? t('common.expandMore', { defaultValue: 'Expand workspace' })
-    : t('common.collapse', { defaultValue: 'Collapse workspace' });
   const backToChatTooltip = t('common.back', { defaultValue: 'Back to Chat' });
   const isSettingsRoute = location.pathname.startsWith('/settings');
   const iconSize = 18;
@@ -111,13 +86,6 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const handleSiderToggle = () => {
     if (!showSiderToggle || !layout?.setSiderCollapsed) return;
     layout.setSiderCollapsed(!layout.siderCollapsed);
-  };
-
-  const handleWorkspaceToggle = () => {
-    if (!workspaceAvailable) {
-      return;
-    }
-    dispatchWorkspaceToggleEvent();
   };
 
   const handleBackToChat = () => {
@@ -187,8 +155,7 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
     }
 
     let cancelled = false;
-    void ipcBridge.conversation.get
-      .invoke({ id: conversation_id })
+    void getConversationOrNull(conversation_id)
       .then((conversation) => {
         if (cancelled) return;
         setMobileCenterTitle(conversation?.name || appTitle);
@@ -228,11 +195,11 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
     if (toolbarRef.current) observer.observe(toolbarRef.current);
 
     return () => observer.disconnect();
-  }, [layout?.isMobile, showBackToChatButton, showWorkspaceButton, mobileCenterTitle]);
+  }, [layout?.isMobile, showBackToChatButton, mobileCenterTitle]);
 
   const mobileCenterStyle = layout?.isMobile
     ? ({
-        '--app-titlebar-mobile-center-offset': `${workspaceAvailable ? mobileCenterOffset : 0}px`,
+        '--app-titlebar-mobile-center-offset': `${mobileCenterOffset}px`,
       } as React.CSSProperties)
     : undefined;
 
@@ -332,20 +299,6 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
       </div>
       <div ref={toolbarRef} className='app-titlebar__toolbar'>
         {layout?.isMobile && <div id='app-titlebar-actions-slot' className='app-titlebar__actions-slot' />}
-        {showWorkspaceButton && (
-          <button
-            type='button'
-            className={classNames('app-titlebar__button', layout?.isMobile && 'app-titlebar__button--mobile')}
-            onClick={handleWorkspaceToggle}
-            aria-label={workspaceTooltip}
-          >
-            {workspaceCollapsed ? (
-              <ExpandRight theme='outline' size={iconSize} fill='currentColor' />
-            ) : (
-              <ExpandLeft theme='outline' size={iconSize} fill='currentColor' />
-            )}
-          </button>
-        )}
         {showWindowControls && <WindowControls />}
       </div>
     </div>

@@ -5,6 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
+import { configService } from '@/common/config/configService';
+import { isElectronDesktop } from '@/renderer/utils/platform';
 import { useCallback, useEffect, useState } from 'react';
 
 const UI_SCALE_DEFAULT = 1;
@@ -25,11 +27,23 @@ const clampFontScale = (value: number) => {
   return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value));
 };
 
+const getStoredWebFontScale = () => {
+  const cached = configService.get('ui.zoomFactor');
+  return typeof cached === 'number' ? clampFontScale(cached) : FONT_SCALE_DEFAULT;
+};
+
 const useFontScale = (): [number, (scale: number) => Promise<void>] => {
-  const [fontScale, setFontScaleState] = useState(FONT_SCALE_DEFAULT);
+  const [fontScale, setFontScaleState] = useState(() =>
+    isElectronDesktop() ? FONT_SCALE_DEFAULT : getStoredWebFontScale()
+  );
 
   // 从主进程读取当前缩放，保持 UI 与 Electron 同步 / Pull zoom factor from main to keep UI state aligned
   const fetchZoomFactor = useCallback(async () => {
+    if (!isElectronDesktop()) {
+      setFontScaleState(getStoredWebFontScale());
+      return;
+    }
+
     try {
       const currentFactor = await ipcBridge.application.getZoomFactor.invoke();
       if (typeof currentFactor === 'number') {
@@ -49,6 +63,17 @@ const useFontScale = (): [number, (scale: number) => Promise<void>] => {
     async (nextScale: number) => {
       const clamped = clampFontScale(nextScale);
       setFontScaleState(clamped);
+
+      if (!isElectronDesktop()) {
+        try {
+          await configService.set('ui.zoomFactor', clamped);
+        } catch (error) {
+          console.error('Failed to persist web font scale:', error);
+          setFontScaleState(getStoredWebFontScale());
+        }
+        return;
+      }
+
       try {
         const updatedFactor = await ipcBridge.application.setZoomFactor.invoke({ factor: clamped });
         if (typeof updatedFactor === 'number' && updatedFactor !== clamped) {

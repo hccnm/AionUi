@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IConversationMcpStatus } from '@/common/config/storage';
+import type { IConversationMcpStatus, TChatConversation } from '@/common/config/storage';
 import type { ConversationContextValue } from '@/renderer/hooks/context/ConversationContext';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
 import FlexFullContainer from '@renderer/components/layout/FlexFullContainer';
@@ -24,6 +24,7 @@ import type { AionrsModelSelection } from './useAionrsModelSelection';
 
 const AionrsChat: React.FC<{
   conversation_id: string;
+  conversation?: TChatConversation;
   workspace: string;
   modelSelection: AionrsModelSelection;
   session_mode?: string;
@@ -35,6 +36,7 @@ const AionrsChat: React.FC<{
   agent_name?: string;
 }> = ({
   conversation_id,
+  conversation,
   workspace,
   modelSelection,
   session_mode,
@@ -72,9 +74,11 @@ const AionrsChat: React.FC<{
           </FlexFullContainer>
           <AionrsSendBox
             conversation_id={conversation_id}
+            workspace={workspace}
             modelSelection={modelSelection}
             session_mode={session_mode}
             agent_name={agent_name}
+            initialConversation={conversation}
           />
         </div>
       </ConversationArtifactProvider>

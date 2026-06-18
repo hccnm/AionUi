@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import { Alert, Button, Collapse, Message, Switch, Tooltip } from '@arco-design/web-react';
+import { isElectronDesktop } from '@/renderer/utils/platform';
 import { Copy, Down, Link } from '@icon-park/react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +19,10 @@ import PreferenceRow from './PreferenceRow';
  * Only visible in development mode.
  */
 const DevSettings: React.FC = () => {
+  if (!isElectronDesktop()) {
+    return null;
+  }
+
   const { t } = useTranslation();
   const { data: cdpStatus, isLoading } = useSWR('cdp.status', () => ipcBridge.application.getCdpStatus.invoke());
   const [switchLoading, setSwitchLoading] = useState(false);

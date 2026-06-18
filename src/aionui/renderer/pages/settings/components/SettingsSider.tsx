@@ -29,7 +29,6 @@ export const BUILTIN_TAB_IDS = [
   'assistants',
   'capabilities',
   'display',
-  'webui',
   'pet',
   'system',
   'about',
@@ -112,7 +111,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     };
 
     // Start with ordered builtin IDs, hiding desktop-only tabs in browser mode
-    const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => isDesktop || id !== 'pet').map((id) => builtinMap[id]);
+    const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => {
+      if (!isDesktop && id === 'pet') {
+        return false;
+      }
+      return true;
+    }).map((id) => builtinMap[id]);
 
     // Extension tabs with position anchoring
     const beforeMap = new Map<string, IExtensionSettingsTab[]>();

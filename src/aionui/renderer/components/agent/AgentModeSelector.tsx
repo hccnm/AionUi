@@ -16,6 +16,15 @@ import { Down } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import MarqueePillLabel from './MarqueePillLabel';
+import { runSingleFlight } from '@/renderer/pages/conversation/utils/singleFlight';
+
+const conversationModeInflight = new Map<string, Promise<{ mode: string; initialized?: boolean } | null>>();
+
+async function loadConversationMode(conversation_id: string): Promise<{ mode: string; initialized?: boolean } | null> {
+  return runSingleFlight(conversationModeInflight, conversation_id, () =>
+    ipcBridge.acpConversation.getMode.invoke({ conversation_id })
+  );
+}
 
 /**
  * Extract mode options from cached ACP config_options.
@@ -168,7 +177,7 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
 
     void (async () => {
       await beforeRuntimeSync?.();
-      return ipcBridge.acpConversation.getMode.invoke({ conversation_id });
+      return loadConversationMode(conversation_id);
     })()
       .then((result) => {
         if (!cancelled && result) {

@@ -21,7 +21,7 @@ import WorkspaceDialogs from './components/WorkspaceDialogs';
 import WorkspaceTabBar from './components/WorkspaceTabBar';
 import WorkspaceToolbar from './components/WorkspaceToolbar';
 import FileTypeIcon from './components/FileTypeIcon';
-import { useFileChanges } from './hooks/useFileChanges';
+import { shouldEnableFileSnapshot, useFileChanges } from './hooks/useFileChanges';
 import { useWorkspaceCollapse } from './hooks/useWorkspaceCollapse';
 import { useWorkspaceDragImport } from './hooks/useWorkspaceDragImport';
 import { useWorkspaceEvents } from './hooks/useWorkspaceEvents';
@@ -45,7 +45,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   conversation_id,
   workspace,
   isTemporaryWorkspace: isTemporaryWorkspaceProp,
-  eventPrefix = 'acp',
+  eventPrefix: eventPrefixProp,
   messageApi: externalMessageApi,
 }) => {
   const { t } = useTranslation();
@@ -58,9 +58,23 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   const messageApi = externalMessageApi ?? internalMessageApi;
   const shouldRenderLocalMessageContext = !externalMessageApi;
 
+  // Authoritative source: `conversation.extra.is_temporary_workspace` is
+  // derived by the backend on every response (see
+  // aionui-conversation::convert::row_to_response). We never inspect the
+  // directory path shape — the backend's temp-workspace layout is not a
+  // public contract. Default to false when the prop is unavailable (e.g.
+  // tests that render the panel outside a conversation).
+  const isTemporaryWorkspace = isTemporaryWorkspaceProp ?? false;
+
   // Tab state and file changes
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('files');
-  const fileChangesHook = useFileChanges({ workspace });
+  const workspaceEventPrefix: NonNullable<WorkspaceProps['eventPrefix']> = eventPrefixProp ?? 'acp';
+  const fileSnapshotEnabled = shouldEnableFileSnapshot({
+    workspace,
+    activeTab,
+    isTemporaryWorkspace,
+  });
+  const fileChangesHook = useFileChanges({ workspace, enabled: fileSnapshotEnabled });
 
   // Bind workspace uploads to the conversation lifecycle: switching the
   // workspace conversation or unmounting the panel cancels in-flight uploads.
@@ -68,7 +82,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
 
   // Initialize all hooks
   const { isWorkspaceCollapsed, setIsWorkspaceCollapsed } = useWorkspaceCollapse();
-  const treeHook = useWorkspaceTree({ workspace, conversation_id, eventPrefix });
+  const treeHook = useWorkspaceTree({ workspace, conversation_id, eventPrefix: workspaceEventPrefix });
   const modalsHook = useWorkspaceModals();
   const pasteHook = useWorkspacePaste({
     conversation_id: conversation_id,
@@ -95,7 +109,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
 
   const fileOpsHook = useWorkspaceFileOps({
     workspace,
-    eventPrefix,
+    eventPrefix: workspaceEventPrefix,
     messageApi,
     t,
     setFiles: treeHook.setFiles,
@@ -120,7 +134,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   // Setup events
   useWorkspaceEvents({
     conversation_id,
-    eventPrefix,
+    eventPrefix: workspaceEventPrefix,
     refreshWorkspace: treeHook.refreshWorkspace,
     clearSelection: treeHook.clearSelection,
     setFiles: treeHook.setFiles,
@@ -142,13 +156,6 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   // Hide root directory when there's a single root with children, as Toolbar serves as the first-level directory
   const treeData = flattenSingleRoot(treeHook.files);
 
-  // Authoritative source: `conversation.extra.is_temporary_workspace` is
-  // derived by the backend on every response (see
-  // aionui-conversation::convert::row_to_response). We never inspect the
-  // directory path shape — the backend's temp-workspace layout is not a
-  // public contract. Default to false when the prop is unavailable (e.g.
-  // tests that render the panel outside a conversation).
-  const isTemporaryWorkspace = isTemporaryWorkspaceProp ?? false;
   void rootName; // reserved for future UI hints; no longer used for detection.
 
   // Get workspace display name using shared utility

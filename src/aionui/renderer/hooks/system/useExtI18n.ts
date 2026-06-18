@@ -36,18 +36,67 @@ function getLocalSettingsTabId(tab: IExtensionSettingsTab): string {
   return tab.id.startsWith(globalPrefix) ? tab.id.slice(globalPrefix.length) : tab.id;
 }
 
+let cachedLocale = '';
+let cachedExtI18nData: Record<string, unknown> | null = null;
+let inflightLocalePromise: Promise<Record<string, unknown>> | null = null;
+const extI18nSubscribers = new Set<(data: Record<string, unknown>) => void>();
+
+function publishExtI18n(data: Record<string, unknown>, locale: string) {
+  cachedLocale = locale;
+  cachedExtI18nData = data;
+  extI18nSubscribers.forEach((listener) => listener(data));
+}
+
+function loadExtI18n(locale: string): Promise<Record<string, unknown>> {
+  if (cachedExtI18nData && cachedLocale === locale) {
+    return Promise.resolve(cachedExtI18nData);
+  }
+
+  if (inflightLocalePromise) {
+    return inflightLocalePromise;
+  }
+
+  inflightLocalePromise = extensionsIpc.getExtI18nForLocale
+    .invoke({ locale })
+    .then((data) => {
+      const next = data ?? {};
+      publishExtI18n(next, locale);
+      return next;
+    })
+    .catch((err) => {
+      console.error('[useExtI18n] Failed to load ext i18n:', err);
+      return cachedLocale === locale && cachedExtI18nData ? cachedExtI18nData : {};
+    })
+    .finally(() => {
+      inflightLocalePromise = null;
+    });
+
+  return inflightLocalePromise;
+}
+
 export function useExtI18n(): {
   resolveExtTabName: (tab: IExtensionSettingsTab) => string;
 } {
   const { i18n } = useTranslation();
-  const [extI18nData, setExtI18nData] = useState<Record<string, unknown>>({});
+  const [extI18nData, setExtI18nData] = useState<Record<string, unknown>>(() =>
+    cachedLocale === i18n.language && cachedExtI18nData ? cachedExtI18nData : {}
+  );
 
   useEffect(() => {
     const locale = i18n.language;
-    void extensionsIpc.getExtI18nForLocale
-      .invoke({ locale })
-      .then((data) => setExtI18nData(data ?? {}))
-      .catch((err) => console.error('[useExtI18n] Failed to load ext i18n:', err));
+    extI18nSubscribers.add(setExtI18nData);
+
+    if (cachedLocale === locale && cachedExtI18nData) {
+      setExtI18nData(cachedExtI18nData);
+    } else {
+      void loadExtI18n(locale).then((data) => {
+        setExtI18nData(data);
+      });
+    }
+
+    return () => {
+      extI18nSubscribers.delete(setExtI18nData);
+    };
   }, [i18n.language]);
 
   const resolveExtTabName = useCallback(
