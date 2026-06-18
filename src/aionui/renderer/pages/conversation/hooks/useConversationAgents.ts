@@ -5,8 +5,9 @@
  */
 
 import useSWR from 'swr';
-import { ipcBridge } from '@/common';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
+import { ASSISTANTS_SWR_KEY, fetchAssistantsCatalog } from '@/renderer/hooks/assistant/assistantsCatalog';
+import { STATIC_RESOURCE_SWR_OPTIONS } from '@/renderer/utils/swr/staticResource';
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents } from '@/renderer/utils/model/agentTypes';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 
@@ -34,26 +35,22 @@ export const useConversationAgents = (): UseConversationAgentsResult => {
     data: cliAgents,
     isLoading: isLoadingAgents,
     mutate,
-  } = useSWR<AgentMetadata[]>(DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents);
+  } = useSWR<AgentMetadata[]>(DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents, STATIC_RESOURCE_SWR_OPTIONS);
 
   // Preset assistants from the backend-maintained catalog
-  const { data: presetAssistants, isLoading: isLoadingPresets } = useSWR('assistants.presets', async () => {
-    try {
-      const list = await ipcBridge.assistants.list.invoke();
-      return list.filter((assistant) => assistant.enabled !== false);
-    } catch (error) {
-      console.error('Failed to load assistants for conversation selector:', error);
-      return [] as Assistant[];
-    }
-  });
+  const {
+    data: presetAssistants,
+    isLoading: isLoadingPresets,
+    mutate: mutatePresetAssistants,
+  } = useSWR<Assistant[]>(ASSISTANTS_SWR_KEY, fetchAssistantsCatalog, STATIC_RESOURCE_SWR_OPTIONS);
 
   const refresh = async () => {
-    await mutate();
+    await Promise.all([mutate(), mutatePresetAssistants()]);
   };
 
   return {
     cliAgents: cliAgents || [],
-    presetAssistants: presetAssistants || [],
+    presetAssistants: (presetAssistants || []).filter((assistant) => assistant.enabled !== false),
     isLoading: isLoadingAgents || isLoadingPresets,
     refresh,
   };

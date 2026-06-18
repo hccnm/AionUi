@@ -68,34 +68,49 @@ const GuidPage: React.FC = () => {
   const [guidEnabledSkills, setGuidEnabledSkills] = useState<string[] | undefined>(undefined);
   const [availableMcpServers, setAvailableMcpServers] = useState<IMcpServer[]>([]);
   const [guidSelectedMcpServerIds, setGuidSelectedMcpServerIds] = useState<string[] | undefined>(undefined);
+  const [skillsLoaded, setSkillsLoaded] = useState(false);
+  const [mcpCatalogLoaded, setMcpCatalogLoaded] = useState(false);
 
-  useEffect(() => {
-    Promise.all([ipcBridge.fs.listBuiltinAutoSkills.invoke(), ipcBridge.fs.listAvailableSkills.invoke()])
-      .then(([autoSkills, availableSkills]) => {
-        const autoNames = new Set(autoSkills.map((s) => s.name));
-        const merged: Array<{ name: string; description: string; isAuto: boolean }> = [
-          ...autoSkills.map((s) => ({ name: s.name, description: s.description, isAuto: true })),
-          ...availableSkills
-            .filter((s) => !autoNames.has(s.name))
-            .map((s) => ({ name: s.name, description: s.description, isAuto: false })),
-        ];
-        setAllSkills(merged);
-      })
-      .catch(() => setAllSkills([]));
-  }, []);
+  const loadSkillsCatalog = useCallback(async () => {
+    if (skillsLoaded) return;
+    try {
+      const [autoSkills, availableSkills] = await Promise.all([
+        ipcBridge.fs.listBuiltinAutoSkills.invoke(),
+        ipcBridge.fs.listAvailableSkills.invoke(),
+      ]);
+      const autoNames = new Set(autoSkills.map((s) => s.name));
+      const merged: Array<{ name: string; description: string; isAuto: boolean }> = [
+        ...autoSkills.map((s) => ({ name: s.name, description: s.description, isAuto: true })),
+        ...availableSkills
+          .filter((s) => !autoNames.has(s.name))
+          .map((s) => ({ name: s.name, description: s.description, isAuto: false })),
+      ];
+      setAllSkills(merged);
+    } catch {
+      setAllSkills([]);
+    } finally {
+      setSkillsLoaded(true);
+    }
+  }, [skillsLoaded]);
 
-  useEffect(() => {
-    void ensureBackendMcpCatalog()
-      .then(({ allServers }) => {
-        setAvailableMcpServers(allServers);
-        setGuidSelectedMcpServerIds((prev) => prev ?? []);
-      })
-      .catch((error) => {
-        console.error('[GuidPage] Failed to load MCP catalog:', error);
-        setAvailableMcpServers([]);
-        setGuidSelectedMcpServerIds((prev) => prev ?? []);
-      });
-  }, []);
+  const loadMcpCatalog = useCallback(async () => {
+    if (mcpCatalogLoaded) return;
+    try {
+      const { allServers } = await ensureBackendMcpCatalog();
+      setAvailableMcpServers(allServers);
+      setGuidSelectedMcpServerIds((prev) => prev ?? []);
+    } catch (error) {
+      console.error('[GuidPage] Failed to load MCP catalog:', error);
+      setAvailableMcpServers([]);
+      setGuidSelectedMcpServerIds((prev) => prev ?? []);
+    } finally {
+      setMcpCatalogLoaded(true);
+    }
+  }, [mcpCatalogLoaded]);
+
+  const handleOpenConfigMenu = useCallback(() => {
+    void Promise.all([loadSkillsCatalog(), loadMcpCatalog()]);
+  }, [loadMcpCatalog, loadSkillsCatalog]);
 
   const handleToggleSkill = useCallback((skillName: string, isAuto: boolean) => {
     if (isAuto) {
@@ -591,6 +606,7 @@ const GuidPage: React.FC = () => {
       mcpServers={availableMcpServers}
       selectedMcpServerIds={guidSelectedMcpServerIds ?? []}
       onToggleMcpServer={handleToggleMcpServer}
+      onConfigMenuOpen={handleOpenConfigMenu}
       hidePresetTag
       loading={guidInput.loading}
       isButtonDisabled={send.isButtonDisabled}

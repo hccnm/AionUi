@@ -15,6 +15,37 @@ const isJobErrorLike = (job: ICronJob): boolean => {
   return job.state.last_status === 'error' || job.state.last_status === 'missed';
 };
 
+let allCronJobsCache: ICronJob[] | null = null;
+let allCronJobsPromise: Promise<ICronJob[]> | null = null;
+
+async function loadAllCronJobsShared(force = false): Promise<ICronJob[]> {
+  if (!force && allCronJobsCache) {
+    return allCronJobsCache;
+  }
+  if (!force && allCronJobsPromise) {
+    return allCronJobsPromise;
+  }
+
+  allCronJobsPromise = ipcBridge.cron
+    .listJobs
+    .invoke()
+    .then((allJobs) => repairCronJobTimeZones(allJobs || []))
+    .then((jobs) => {
+      allCronJobsCache = jobs;
+      return jobs;
+    })
+    .finally(() => {
+      allCronJobsPromise = null;
+    });
+
+  return allCronJobsPromise;
+}
+
+function updateAllCronJobsCache(updater: (jobs: ICronJob[]) => ICronJob[]) {
+  if (!allCronJobsCache) return;
+  allCronJobsCache = updater(allCronJobsCache);
+}
+
 /**
  * Common cron job actions
  */
@@ -179,11 +210,10 @@ export function useAllCronJobs() {
   const [loading, setLoading] = useState(true);
 
   // Fetch all jobs
-  const fetchJobs = useCallback(async () => {
+  const fetchJobs = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const allJobs = await ipcBridge.cron.listJobs.invoke();
-      setJobs(await repairCronJobTimeZones(allJobs || []));
+      setJobs(await loadAllCronJobsShared(force));
     } catch (err) {
       console.error('[useAllCronJobs] Failed to fetch jobs:', err);
     } finally {
@@ -200,12 +230,15 @@ export function useAllCronJobs() {
   const eventHandlers = useMemo<CronJobEventHandlers>(
     () => ({
       onJobCreated: (job: ICronJob) => {
+        updateAllCronJobsCache((prev) => (prev.some((j) => j.id === job.id) ? prev : [...prev, job]));
         setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev : [...prev, job]));
       },
       onJobUpdated: (job: ICronJob) => {
+        updateAllCronJobsCache((prev) => prev.map((j) => (j.id === job.id ? job : j)));
         setJobs((prev) => prev.map((j) => (j.id === job.id ? job : j)));
       },
       onJobRemoved: ({ job_id }: { job_id: string }) => {
+        updateAllCronJobsCache((prev) => prev.filter((j) => j.id !== job_id));
         setJobs((prev) => prev.filter((j) => j.id !== job_id));
       },
     }),
@@ -216,10 +249,12 @@ export function useAllCronJobs() {
 
   // Actions with local state updates
   const handleJobUpdated = useCallback((job_id: string, job: ICronJob) => {
+    updateAllCronJobsCache((prev) => prev.map((item) => (item.id === job_id ? job : item)));
     setJobs((prev) => prev.map((j) => (j.id === job_id ? job : j)));
   }, []);
 
   const handleJobDeleted = useCallback((job_id: string) => {
+    updateAllCronJobsCache((prev) => prev.filter((item) => item.id !== job_id));
     setJobs((prev) => prev.filter((j) => j.id !== job_id));
   }, []);
 
@@ -274,10 +309,10 @@ export function useCronJobsMap() {
   }, [unreadConversations]);
 
   // Fetch all jobs and group by conversation
-  const fetchAllJobs = useCallback(async () => {
+  const fetchAllJobs = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const allJobs = await repairCronJobTimeZones(await ipcBridge.cron.listJobs.invoke());
+      const allJobs = await loadAllCronJobsShared(force);
       const map = new Map<string, ICronJob[]>();
 
       for (const job of allJobs || []) {
@@ -309,6 +344,7 @@ export function useCronJobsMap() {
   const eventHandlers = useMemo<CronJobEventHandlers>(
     () => ({
       onJobCreated: (job: ICronJob) => {
+        updateAllCronJobsCache((prev) => (prev.some((j) => j.id === job.id) ? prev : [...prev, job]));
         setJobsMap((prev) => {
           const convId = job.metadata.conversation_id;
           const existing = prev.get(convId) || [];
@@ -325,6 +361,7 @@ export function useCronJobsMap() {
       },
       onJobUpdated: (job: ICronJob) => {
         const convId = job.metadata.conversation_id;
+        updateAllCronJobsCache((prev) => prev.map((j) => (j.id === job.id ? job : j)));
 
         // Check if this is a new execution (last_run_at_ms changed)
         const prevLastRunAt = lastRunAtMapRef.current.get(job.id);
@@ -348,7 +385,7 @@ export function useCronJobsMap() {
         }
 
         setJobsMap((prev) => {
-          const newMap = new Map(prev);
+          const newMap = new Map<string, ICronJob[]>(prev);
           const existing = newMap.get(convId) || [];
           newMap.set(
             convId,
@@ -358,8 +395,9 @@ export function useCronJobsMap() {
         });
       },
       onJobRemoved: ({ job_id }: { job_id: string }) => {
+        updateAllCronJobsCache((prev) => prev.filter((j) => j.id !== job_id));
         setJobsMap((prev) => {
-          const newMap = new Map(prev);
+          const newMap = new Map<string, ICronJob[]>(prev);
           for (const [convId, convJobs] of newMap.entries()) {
             const filtered = convJobs.filter((j) => j.id !== job_id);
             if (filtered.length === 0) {

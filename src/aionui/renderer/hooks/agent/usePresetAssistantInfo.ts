@@ -10,8 +10,11 @@ import type { TChatConversation } from '@/common/config/storage';
 import { ipcBridge } from '@/common';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import CoworkLogo from '@/renderer/assets/icons/cowork.svg';
+import { ACP_ADAPTERS_SWR_KEY, fetchAcpAdaptersCatalog } from '@/renderer/hooks/agent/acpAdaptersCatalog';
+import { ASSISTANTS_SWR_KEY, fetchAssistantsCatalog } from '@/renderer/hooks/assistant/assistantsCatalog';
 import { resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents, type AgentMetadata } from '@/renderer/utils/model/agentTypes';
+import { STATIC_RESOURCE_SWR_OPTIONS } from '@/renderer/utils/swr/staticResource';
 import useSWR from 'swr';
 export interface PresetAssistantInfo {
   name: string;
@@ -207,15 +210,31 @@ export function usePresetAssistantInfo(conversation: TChatConversation | undefin
   isLoading: boolean;
 } {
   const { i18n } = useTranslation();
+  const presetId = conversation ? resolvePresetId(conversation) : null;
+  const legacyPayload = conversation
+    ? extractLegacyPresetPayload(conversation)
+    : { rules: '', enabled_skills: [], hasPayload: false };
+  const extra = conversation?.extra as { agent_id?: unknown; custom_agent_id?: unknown } | undefined;
+  const rowAgentId =
+    (typeof extra?.agent_id === 'string' && extra.agent_id.trim()) ||
+    (typeof extra?.custom_agent_id === 'string' && extra.custom_agent_id.trim()) ||
+    '';
+  const needsAssistantsCatalog = Boolean(presetId || legacyPayload.hasPayload);
+  const needsExtensionAdapters = Boolean(presetId?.startsWith('ext:'));
+  const needsDetectedAgents = Boolean(rowAgentId);
 
   // Merged assistant catalog (builtin + user + extension) from backend
-  const { data: assistantsList, isLoading: isLoadingAssistants } = useSWR('assistants', () =>
-    ipcBridge.assistants.list.invoke().catch(() => [] as Assistant[])
+  const { data: assistantsList, isLoading: isLoadingAssistants } = useSWR<Assistant[]>(
+    needsAssistantsCatalog ? ASSISTANTS_SWR_KEY : null,
+    fetchAssistantsCatalog,
+    STATIC_RESOURCE_SWR_OPTIONS
   );
 
   // Extension-contributed ACP adapters (for ext:{extensionName}:{adapterId} conversations)
-  const { data: extensionAcpAdapters, isLoading: isLoadingExtAdapters } = useSWR('extensions.acpAdapters', () =>
-    ipcBridge.extensions.getAcpAdapters.invoke().catch(() => [] as Record<string, unknown>[])
+  const { data: extensionAcpAdapters, isLoading: isLoadingExtAdapters } = useSWR<Record<string, unknown>[]>(
+    needsExtensionAdapters ? ACP_ADAPTERS_SWR_KEY : null,
+    fetchAcpAdaptersCatalog,
+    STATIC_RESOURCE_SWR_OPTIONS
   );
 
   // Remote agent for remote conversations
@@ -229,7 +248,11 @@ export function usePresetAssistantInfo(conversation: TChatConversation | undefin
   // Backend-registered agents (includes `agent_source === 'custom'` rows). Used
   // to resolve the user-picked emoji/name for a custom ACP conversation where
   // no preset assistant was attached.
-  const { data: detectedAgents } = useSWR<AgentMetadata[]>(DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents);
+  const { data: detectedAgents } = useSWR<AgentMetadata[]>(
+    needsDetectedAgents ? DETECTED_AGENTS_SWR_KEY : null,
+    fetchDetectedAgents,
+    STATIC_RESOURCE_SWR_OPTIONS
+  );
 
   return useMemo(() => {
     if (!conversation) return { info: null, isLoading: false };
@@ -251,11 +274,6 @@ export function usePresetAssistantInfo(conversation: TChatConversation | undefin
     // (written by buildAgentConversationParams) or the legacy `custom_agent_id`
     // alias. Neither is a preset assistant id, so we resolve directly against
     // the detected-agent catalog and trust the row's own icon/name.
-    const extra = conversation.extra as { agent_id?: unknown; custom_agent_id?: unknown } | undefined;
-    const rowAgentId =
-      (typeof extra?.agent_id === 'string' && extra.agent_id.trim()) ||
-      (typeof extra?.custom_agent_id === 'string' && extra.custom_agent_id.trim()) ||
-      '';
     if (rowAgentId && Array.isArray(detectedAgents)) {
       const row = detectedAgents.find((a) => a.id === rowAgentId && a.agent_source === 'custom');
       if (row) {
@@ -264,15 +282,13 @@ export function usePresetAssistantInfo(conversation: TChatConversation | undefin
       }
     }
 
-    const presetId = resolvePresetId(conversation);
     const locale = i18n.language || 'zh-CN';
 
     if (!presetId) {
       const inferredInfo = inferLegacyAssistantInfo(conversation, locale, assistantsList);
       if (inferredInfo) return { info: inferredInfo, isLoading: false };
 
-      const { hasPayload } = extractLegacyPresetPayload(conversation);
-      if (hasPayload && isLoadingAssistants) {
+      if (legacyPayload.hasPayload && isLoadingAssistants) {
         return { info: null, isLoading: true };
       }
       return { info: null, isLoading: false };
@@ -315,13 +331,16 @@ export function usePresetAssistantInfo(conversation: TChatConversation | undefin
   }, [
     conversation,
     i18n.language,
+    legacyPayload.hasPayload,
     assistantsList,
     isLoadingAssistants,
     extensionAcpAdapters,
     isLoadingExtAdapters,
+    rowAgentId,
     remoteAgentId,
     remoteAgent,
     isLoadingRemoteAgent,
     detectedAgents,
+    presetId,
   ]);
 }

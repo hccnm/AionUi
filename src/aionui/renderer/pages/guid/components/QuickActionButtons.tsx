@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { webui } from '@/common/adapter/ipcBridge';
-import { Earth } from '@icon-park/react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import styles from '../index.module.css';
 
 type QuickActionButtonsProps = {
@@ -18,14 +15,6 @@ type QuickActionButtonsProps = {
   activeShadow: string;
 };
 
-type WebuiQuickStatus = 'checking' | 'running' | 'stopped' | 'error';
-
-const WEBUI_STATUS_CACHE_TTL_MS = 3000;
-let webuiStatusCache: {
-  quickStatus: WebuiQuickStatus;
-  at: number;
-} | null = null;
-
 const QuickActionButtons: React.FC<QuickActionButtonsProps> = ({
   onOpenLink,
   onOpenBugReport,
@@ -33,50 +22,7 @@ const QuickActionButtons: React.FC<QuickActionButtonsProps> = ({
   activeShadow,
 }) => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [hoveredQuickAction, setHoveredQuickAction] = useState<'bugReport' | 'repo' | 'webui' | null>(null);
-  const [webuiQuickStatus, setWebuiQuickStatus] = useState<WebuiQuickStatus>('checking');
-
-  useEffect(() => {
-    let alive = true;
-    const loadStatus = async () => {
-      const now = Date.now();
-      if (webuiStatusCache && now - webuiStatusCache.at < WEBUI_STATUS_CACHE_TTL_MS) {
-        setWebuiQuickStatus(webuiStatusCache.quickStatus);
-        return;
-      }
-
-      try {
-        const result = await webui.getStatus.invoke();
-        if (!alive) return;
-        if (result) {
-          const quickStatus: WebuiQuickStatus = result.running ? 'running' : 'stopped';
-          setWebuiQuickStatus(quickStatus);
-          webuiStatusCache = { quickStatus, at: Date.now() };
-          return;
-        }
-        setWebuiQuickStatus('error');
-        webuiStatusCache = { quickStatus: 'error', at: Date.now() };
-      } catch {
-        if (!alive) return;
-        setWebuiQuickStatus('error');
-        webuiStatusCache = { quickStatus: 'error', at: Date.now() };
-      }
-    };
-
-    void loadStatus();
-
-    const unsubscribe = webui.statusChanged.on((payload) => {
-      const nextQuickStatus: WebuiQuickStatus = payload.running ? 'running' : 'stopped';
-      setWebuiQuickStatus(nextQuickStatus);
-      webuiStatusCache = { quickStatus: nextQuickStatus, at: Date.now() };
-    });
-
-    return () => {
-      alive = false;
-      unsubscribe();
-    };
-  }, []);
+  const [hoveredQuickAction, setHoveredQuickAction] = useState<'bugReport' | 'repo' | null>(null);
 
   const quickActionStyle = useCallback(
     (isActive: boolean) => ({
@@ -87,27 +33,6 @@ const QuickActionButtons: React.FC<QuickActionButtonsProps> = ({
     }),
     [activeShadow, inactiveBorderColor]
   );
-
-  const handleOpenWebUI = useCallback(() => {
-    void navigate('/settings/webui');
-  }, [navigate]);
-
-  const webuiStatusLabel =
-    webuiQuickStatus === 'running'
-      ? t('settings.webui.running', { defaultValue: 'Running' })
-      : webuiQuickStatus === 'checking'
-        ? t('settings.webui.starting', { defaultValue: 'Checking' })
-        : webuiQuickStatus === 'error'
-          ? t('settings.webui.operationFailed', { defaultValue: 'Unavailable' })
-          : t('settings.webui.enable', { defaultValue: 'Start' });
-  const webuiIconColor =
-    webuiQuickStatus === 'running'
-      ? 'rgb(var(--success-6))'
-      : webuiQuickStatus === 'checking'
-        ? 'rgb(var(--primary-6))'
-        : webuiQuickStatus === 'error'
-          ? 'var(--color-text-3)'
-          : 'var(--color-text-4)';
 
   return (
     <div
@@ -166,28 +91,6 @@ const QuickActionButtons: React.FC<QuickActionButtonsProps> = ({
           </svg>
           <span className='opacity-0 max-w-0 overflow-hidden text-14px text-[var(--color-text-2)] group-hover:opacity-100 group-hover:max-w-120px transition-all duration-360 ease-in-out'>
             {t('conversation.welcome.quickActionStar')}
-          </span>
-        </div>
-        <div
-          className='group inline-flex items-center justify-center h-36px min-w-36px max-w-36px px-0 rd-999px bg-fill-0 cursor-pointer overflow-hidden whitespace-nowrap hover:max-w-200px hover:px-14px hover:justify-start hover:gap-8px transition-[max-width,padding,border-radius,box-shadow] duration-420 ease-in-out'
-          style={quickActionStyle(hoveredQuickAction === 'webui')}
-          onMouseEnter={() => setHoveredQuickAction('webui')}
-          onMouseLeave={() => setHoveredQuickAction(null)}
-          onClick={handleOpenWebUI}
-        >
-          <div className='relative w-20px h-20px flex-shrink-0 leading-none'>
-            <div className='absolute inset-0 flex items-center justify-center'>
-              <Earth
-                theme='outline'
-                size={20}
-                fill='currentColor'
-                className='block transition-colors duration-360'
-                style={{ color: webuiIconColor }}
-              />
-            </div>
-          </div>
-          <span className='opacity-0 max-w-0 overflow-hidden text-14px text-[var(--color-text-2)] group-hover:opacity-100 group-hover:max-w-160px transition-all duration-360 ease-in-out'>
-            {t('settings.webui', { defaultValue: 'WebUI' })} · {webuiStatusLabel}
           </span>
         </div>
       </div>

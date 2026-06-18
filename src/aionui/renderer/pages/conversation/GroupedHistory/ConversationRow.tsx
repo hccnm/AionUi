@@ -5,7 +5,6 @@
  */
 
 import { getAgentLogo } from '@/renderer/utils/model/agentLogo';
-import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { CronJobIndicator } from '@/renderer/pages/cron';
 import { cleanupSiderTooltips, getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
@@ -166,7 +165,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             <Checkbox checked={checked} />
           </span>
         )}
-        <span className='size-22px flex items-center justify-center shrink-0 relative'>
+        <span className='size-22px flex items-center justify-center shrink-0 relative line-height-0'>
           {isGenerating && !batchMode ? <Spin size={16} /> : renderLeadingIcon()}
           {/* Pinned indicator: only visible when row is hovered, overlays leading icon */}
           {!batchMode && isPinned && !isMobile && !isGenerating && (
@@ -178,7 +177,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             </span>
           )}
         </span>
-        <FlexFullContainer className='h-24px min-w-0 flex-1 collapsed-hidden'>
+        <div className='collapsed-hidden min-w-0 flex-1 flex items-center overflow-hidden self-stretch'>
           <Tooltip
             content={conversation.name}
             disabled={!inlineNameTooltipEnabled}
@@ -188,11 +187,11 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             popupHoverStay={false}
             position='top'
           >
-            <div className='chat-history__item-name overflow-hidden text-ellipsis block w-full text-14px font-[500] lh-24px whitespace-nowrap min-w-0 text-t-primary'>
+            <div className='chat-history__item-name block w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-14px font-[500] leading-22px text-t-primary'>
               <span className='block overflow-hidden text-ellipsis whitespace-nowrap'>{conversation.name}</span>
             </div>
           </Tooltip>
-        </FlexFullContainer>
+        </div>
 
         {renderCompletionUnreadDot()}
         {!batchMode && (

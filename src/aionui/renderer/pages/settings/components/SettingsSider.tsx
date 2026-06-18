@@ -1,4 +1,3 @@
-import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
 import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
@@ -247,11 +246,11 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
                     )
                   )}
                 </span>
-                <FlexFullContainer className='h-24px collapsed-hidden'>
-                  <div className='settings-sider__item-label text-nowrap overflow-hidden inline-block w-full text-14px font-[500] lh-24px whitespace-nowrap text-t-primary'>
+                <div className='collapsed-hidden min-w-0 flex-1 flex items-center overflow-hidden self-stretch'>
+                  <div className='settings-sider__item-label block w-full truncate text-14px font-[500] leading-22px whitespace-nowrap text-t-primary'>
                     {item.label}
                   </div>
-                </FlexFullContainer>
+                </div>
               </div>
             </Tooltip>
           </React.Fragment>

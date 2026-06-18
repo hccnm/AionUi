@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ipcBridge } from '@/common';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
+import { ASSISTANTS_SWR_KEY, fetchAssistantsCatalog } from '@/renderer/hooks/assistant/assistantsCatalog';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import { useAgents } from '@/renderer/hooks/agent/useAgents';
+import { STATIC_RESOURCE_SWR_OPTIONS } from '@/renderer/utils/swr/staticResource';
 import { useCallback, useMemo } from 'react';
 import useSWR from 'swr';
 
@@ -66,14 +67,11 @@ export const useCustomAgentsLoader = ({
 }: UseCustomAgentsLoaderOptions): UseCustomAgentsLoaderResult => {
   // Preset assistants share their own cache so settings / guid / conversation
   // all see the same list without duplicate HTTP calls.
-  const { data: assistantList } = useSWR('assistants.list', async () => {
-    try {
-      return await ipcBridge.assistants.list.invoke();
-    } catch (error) {
-      console.error('Failed to load assistants:', error);
-      return [] as Assistant[];
-    }
-  });
+  const { data: assistantList } = useSWR<Assistant[]>(
+    ASSISTANTS_SWR_KEY,
+    fetchAssistantsCatalog,
+    STATIC_RESOURCE_SWR_OPTIONS
+  );
   const assistants = assistantList ?? [];
 
   // Execution-engine rows come from the shared agents cache — every subscriber

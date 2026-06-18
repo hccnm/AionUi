@@ -12,12 +12,11 @@ import PwaPullToRefresh from '@/renderer/components/layout/PwaPullToRefresh';
 import Titlebar from '@/renderer/components/layout/Titlebar';
 import { Layout as ArcoLayout } from '@arco-design/web-react';
 import classNames from 'classnames';
-import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutContext } from '@renderer/hooks/context/LayoutContext';
 import { NavigationHistoryProvider } from '@renderer/hooks/context/NavigationHistoryContext';
 import { useDeepLink } from '@renderer/hooks/system/useDeepLink';
-import { useNotificationClick } from '@renderer/hooks/system/useNotificationClick';
 import { useDirectorySelection } from '@renderer/hooks/file/useDirectorySelection';
 import { processCustomCss } from '@renderer/utils/theme/customCssProcessor';
 import { cleanupSiderTooltips } from '@renderer/utils/ui/siderTooltip';
@@ -45,38 +44,6 @@ const SidebarIcon: React.FC<{ size?: number; strokeWidth?: number }> = ({ size =
     <line x1='18' y1='10' x2='18' y2='38' />
   </svg>
 );
-
-const useDebug = () => {
-  const [count, setCount] = useState(0);
-  const timer = useRef<any>(null);
-  const onClick = () => {
-    const open = () => {
-      ipcBridge.application.openDevTools.invoke().catch((error) => {
-        console.error('Failed to open dev tools:', error);
-      });
-      setCount(0);
-    };
-    if (count >= 3) {
-      return open();
-    }
-    setCount((prev) => {
-      if (prev >= 2) {
-        open();
-        return 0;
-      }
-      return prev + 1;
-    });
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      clearTimeout(timer.current);
-      setCount(0);
-    }, 1000);
-  };
-
-  return { onClick };
-};
-
-const UpdateModal = React.lazy(() => import('@/renderer/components/settings/UpdateModal'));
 
 const DEFAULT_SIDER_WIDTH = 260;
 const DESKTOP_COLLAPSED_WIDTH = 0;
@@ -111,11 +78,8 @@ const Layout: React.FC<{
     typeof window === 'undefined' ? 390 : window.innerWidth
   );
   const [customCss, setCustomCss] = useState<string>('');
-  const [shouldMountUpdateModal, setShouldMountUpdateModal] = useState(false);
-  const { onClick } = useDebug();
   const { contextHolder: directorySelectionContextHolder } = useDirectorySelection();
   useDeepLink();
-  useNotificationClick();
   const navigate = useNavigate();
   useConversationShortcuts({ navigate });
   const location = useLocation();
@@ -292,6 +256,7 @@ const Layout: React.FC<{
 
   // Bridge Main Process logs to F12 Console
   useEffect(() => {
+    if (!isElectronDesktop()) return;
     const unsubscribe = ipcBridge.application.logStream.on((entry) => {
       const prefix = `%c[Main:${entry.tag}]%c ${entry.message}`;
       const style = 'color:#7c3aed;font-weight:bold';
@@ -469,7 +434,6 @@ const Layout: React.FC<{
                   className={classNames('shrink-0 size-32px relative rd-0.5rem overflow-hidden', {
                     '!size-24px': collapsed,
                   })}
-                  onClick={onClick}
                 >
                   <img src={appLogo} alt='senmoAI' className='absolute inset-0 size-full object-cover' />
                 </div>
@@ -526,9 +490,6 @@ const Layout: React.FC<{
               <Outlet />
               {directorySelectionContextHolder}
               <PwaPullToRefresh />
-              <Suspense fallback={null}>
-                <UpdateModal />
-              </Suspense>
             </ArcoLayout.Content>
           </ArcoLayout>
         </div>

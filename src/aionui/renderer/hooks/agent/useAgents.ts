@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents } from '@/renderer/utils/model/agentTypes';
+import { STATIC_RESOURCE_SWR_OPTIONS } from '@/renderer/utils/swr/staticResource';
 import useSWR, { mutate } from 'swr';
 
 export type UseAgentsResult = {
@@ -27,7 +28,11 @@ export type UseAgentsResult = {
  * same `DETECTED_AGENTS_SWR_KEY`.
  */
 export const useAgents = (): UseAgentsResult => {
-  const { data, isLoading, error } = useSWR<AgentMetadata[]>(DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents);
+  const { data, isLoading, error } = useSWR<AgentMetadata[]>(
+    DETECTED_AGENTS_SWR_KEY,
+    fetchDetectedAgents,
+    STATIC_RESOURCE_SWR_OPTIONS
+  );
 
   return {
     agents: data ?? [],

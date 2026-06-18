@@ -18,6 +18,7 @@ import {
   type AgentMetadata,
   type AgentSource,
 } from '@/renderer/utils/model/agentTypes';
+import { STATIC_RESOURCE_SWR_OPTIONS } from '@/renderer/utils/swr/staticResource';
 import { getAgentModes } from '@/renderer/utils/model/agentModes';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
@@ -261,10 +262,18 @@ export const useGuidAgentSelection = ({
   const is_presetAgent = Boolean(selectedAgentInfo?.is_preset);
 
   // --- SWR: Fetch detected execution engines (shared cache) ---
-  const { data: availableAgentsData } = useSWR<AvailableAgent[]>(DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents);
+  const { data: availableAgentsData } = useSWR<AvailableAgent[]>(
+    DETECTED_AGENTS_SWR_KEY,
+    fetchDetectedAgents,
+    STATIC_RESOURCE_SWR_OPTIONS
+  );
 
   // Fetch remote agents from DB and merge into available agents
-  const { data: remoteAgentsData } = useSWR('remote-agents.list', () => ipcBridge.remoteAgent.list.invoke());
+  const { data: remoteAgentsData } = useSWR(
+    'remote-agents.list',
+    () => ipcBridge.remoteAgent.list.invoke(),
+    STATIC_RESOURCE_SWR_OPTIONS
+  );
 
   useEffect(() => {
     if (!availableAgentsData) return;

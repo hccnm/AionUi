@@ -5,10 +5,13 @@
  */
 
 import { bridge, logger } from '@office-ai/platform';
-import { authSessionStore } from '@/common/auth/session';
-import { expireAuthSession, fetchWsToken as fetchAuthenticatedWsToken } from '@/common/auth/http';
 import type { ElectronBridgeAPI } from '@/common/types/platform/electron';
-import { resolveHttpUrl, resolveWsUrl } from '@web/config/backend';
+import {
+  connectSharedWebSocket,
+  reconnectSharedWebSocket,
+  sendSharedWebSocketMessage,
+  subscribeSharedWebSocketAll,
+} from '@/common/adapter/sharedWebSocket';
 
 interface CustomWindow extends Window {
   electronAPI?: ElectronBridgeAPI;
@@ -19,11 +22,7 @@ interface CustomWindow extends Window {
 
 const win = window as CustomWindow;
 
-/**
- * 适配electron的API到浏览器中,建立renderer和main的通信桥梁, 与preload.ts中的注入对应
- * */
 if (win.electronAPI) {
-  // Electron 环境 - 使用 IPC 通信
   bridge.adapter({
     emit(name, data) {
       return win.electronAPI.emit(name, data);
@@ -34,211 +33,31 @@ if (win.electronAPI) {
           const { value } = event;
           const { name, data } = JSON.parse(value);
           emitter.emit(name, data);
-        } catch (e) {
-          console.warn('JSON parsing error:', e);
+        } catch (error) {
+          console.warn('JSON parsing error:', error);
         }
       });
     },
   });
 } else {
-  // Web 环境 - 使用 WebSocket 通信，并在登录后自动补上已获取 Cookie 的连接
-  // Web runtime bridge: ensure the socket reconnects after login so session cookie can be sent.
-  // Path must be `/ws` — web-host's static-server only proxies WebSocket upgrades under /ws.
-  const socketUrl = resolveWsUrl();
-  const wsTokenUrl = resolveHttpUrl('/api/ws-token');
-
-  type QueuedMessage = { name: string; data: unknown };
-
-  let socket: WebSocket | null = null;
-  let emitterRef: { emit: (name: string, data: unknown) => void } | null = null;
-  let reconnectTimer: number | null = null;
-  let reconnectDelay = 500;
-  let shouldReconnect = true; // Flag to control reconnection
-
-  const messageQueue: QueuedMessage[] = [];
-
-  const handleAuthExpired = () => {
-    shouldReconnect = false;
-    if (reconnectTimer !== null) {
-      window.clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    expireAuthSession(authSessionStore);
-
-    if (window.location.pathname === '/login' || window.location.hash.includes('/login')) {
-      return;
-    }
-
-    setTimeout(() => {
-      window.location.hash = '/login';
-    }, 500);
-  };
-
-  // 1.发送队列中积压的消息，确保在重新建立连接后不会丢事件
-  const flushQueue = () => {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    while (messageQueue.length > 0) {
-      const queued = messageQueue.shift();
-      if (queued) {
-        socket.send(JSON.stringify(queued));
-      }
-    }
-  };
-
-  // 2.简单的指数退避重连，等待服务端在登录成功后接受新连接
-  const scheduleReconnect = () => {
-    if (reconnectTimer !== null || !shouldReconnect) {
-      return;
-    }
-
-    reconnectTimer = window.setTimeout(() => {
-      reconnectTimer = null;
-      reconnectDelay = Math.min(reconnectDelay * 2, 8000);
-      void connect();
-    }, reconnectDelay);
-  };
-
-  // 3.建立 WebSocket 连接（或复用已有的 OPEN/CONNECTING 状态）
-  const connect = async () => {
-    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
-
-    try {
-      const wsToken = await fetchAuthenticatedWsToken({
-        url: wsTokenUrl,
-        sessionStore: authSessionStore,
-      });
-      socket = new WebSocket(socketUrl, [wsToken]);
-    } catch (error) {
-      if (!authSessionStore.getToken()) {
-        handleAuthExpired();
-        return;
-      }
-      scheduleReconnect();
-      return;
-    }
-
-    // Capture the socket created in this call so the close handler only
-    // nulls the outer reference when it still points at THIS socket.
-    // Without this guard, a late-firing close event from the OLD socket
-    // could wipe the reference to a NEWLY created replacement socket.
-    const currentSocket = socket;
-
-    currentSocket.addEventListener('open', () => {
-      reconnectDelay = 500;
-      flushQueue();
-    });
-
-    currentSocket.addEventListener('message', (event: MessageEvent) => {
-      if (!emitterRef) {
-        return;
-      }
-
-      try {
-        const payload = JSON.parse(event.data as string) as {
-          name: string;
-          data: unknown;
-        };
-
-        // 处理服务端心跳 ping，立即回复 pong 以保持连接
-        // Handle server heartbeat ping - respond with pong immediately to keep connection alive
-        if (payload.name === 'ping') {
-          if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ name: 'pong', data: { timestamp: Date.now() } }));
-          }
-          return;
-        }
-
-        // 处理认证过期 - 停止重连并跳转到登录页
-        // Handle auth expiration - stop reconnecting and redirect to login
-        if (payload.name === 'auth-expired') {
-          console.warn('[WebSocket] Authentication expired, stopping reconnection');
-          socket?.close();
-          handleAuthExpired();
-          return;
-        }
-
-        emitterRef.emit(payload.name, payload.data);
-      } catch (error) {
-        // 忽略格式错误的消息 / Ignore malformed payloads
-      }
-    });
-
-    currentSocket.addEventListener('close', (event: CloseEvent) => {
-      // Only null the outer reference if it still points at this socket.
-      if (socket === currentSocket) {
-        socket = null;
-      }
-
-      // Detect auth failure from close code (server sends 1008 for token issues).
-      // This acts as a fallback in case the auth-expired message was not received
-      // (e.g., socket not yet ready for sending during initial handshake).
-      if (event.code === 1008 && !shouldReconnect) {
-        return; // Already handled by auth-expired message handler
-      }
-      if (event.code === 1008) {
-        console.warn('[WebSocket] Connection rejected by server (policy violation), redirecting to login');
-        handleAuthExpired();
-        return;
-      }
-
-      scheduleReconnect();
-    });
-
-    currentSocket.addEventListener('error', () => {
-      currentSocket.close();
-    });
-  };
-
-  // 4.确保在发送/订阅前已经发起连接
-  const ensureSocket = () => {
-    if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
-      void connect();
-    }
-  };
-
   bridge.adapter({
     emit(name, data) {
-      const message: QueuedMessage = { name, data };
-
-      ensureSocket();
-
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        try {
-          socket.send(JSON.stringify(message));
-          return;
-        } catch (error) {
-          scheduleReconnect();
-        }
-      }
-
-      messageQueue.push(message);
+      sendSharedWebSocketMessage(name, data);
     },
     on(emitter) {
-      emitterRef = emitter;
       win.__bridgeEmitter = emitter;
-
-      // Expose callback emitter for bridge provider pattern
-      // Used by components to send responses back through WebSocket
       win.__emitBridgeCallback = (name: string, data: unknown) => {
         emitter.emit(name, data);
       };
 
-      ensureSocket();
+      subscribeSharedWebSocketAll((data, name) => {
+        emitter.emit(name, data);
+      });
     },
   });
 
-  void connect();
-
-  // Expose reconnection control for login flow
   win.__websocketReconnect = () => {
-    shouldReconnect = true;
-    reconnectDelay = 500;
-    void connect();
+    reconnectSharedWebSocket();
   };
 }
 

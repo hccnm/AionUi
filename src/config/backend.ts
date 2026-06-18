@@ -1,7 +1,23 @@
 const DEFAULT_WS_PATH = '/ws';
 
+function isWebUiBrowserRuntime(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+  return !(window as Window & { __backendPort?: number }).__backendPort;
+}
+
 export function getBackendBaseUrl(value = import.meta.env.VITE_AIONUI_BACKEND_BASE_URL ?? ''): string {
-  return value.trim().replace(/\/+$/, '');
+  const normalized = value.trim().replace(/\/+$/, '');
+
+  // In Vite dev, browser requests should go through the same-origin dev proxy
+  // instead of hitting the configured backend origin directly. This removes
+  // CORS preflight noise without affecting desktop or non-browser paths.
+  if (normalized && import.meta.env.DEV && isWebUiBrowserRuntime()) {
+    return '';
+  }
+
+  return normalized;
 }
 
 export function resolveHttpUrl(path: string, backendBaseUrl = getBackendBaseUrl()): string {

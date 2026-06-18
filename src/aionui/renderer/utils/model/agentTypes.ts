@@ -102,16 +102,29 @@ export type AgentMetadata = {
 };
 
 /** Shared fetcher for DETECTED_AGENTS_SWR_KEY — single source of truth. */
+let detectedAgentsPromise: Promise<AgentMetadata[]> | null = null;
+
 export async function fetchDetectedAgents(): Promise<AgentMetadata[]> {
-  try {
-    const agents = await ipcBridge.acpConversation.getAvailableAgents.invoke();
-    if (Array.isArray(agents)) {
-      return agents as AgentMetadata[];
-    }
-  } catch {
-    // fallback to empty
+  if (detectedAgentsPromise) {
+    return detectedAgentsPromise;
   }
-  return [];
+
+  detectedAgentsPromise = ipcBridge.acpConversation.getAvailableAgents
+    .invoke()
+    .then((agents) => {
+      if (Array.isArray(agents)) {
+        return agents as AgentMetadata[];
+      }
+      return [] as AgentMetadata[];
+    })
+    .catch(() => {
+      return [] as AgentMetadata[];
+    })
+    .finally(() => {
+      detectedAgentsPromise = null;
+    });
+
+  return detectedAgentsPromise;
 }
 
 /**

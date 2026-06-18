@@ -58,6 +58,7 @@ type GuidActionRowProps = {
   mcpServers: IMcpServer[];
   selectedMcpServerIds: string[];
   onToggleMcpServer: (serverId: string) => void;
+  onConfigMenuOpen?: () => void;
 
   // Send button
   loading: boolean;
@@ -89,6 +90,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   mcpServers,
   selectedMcpServerIds,
   onToggleMcpServer,
+  onConfigMenuOpen,
   hidePresetTag = false,
   loading,
   isButtonDisabled,
@@ -268,7 +270,16 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
     <div className={styles.actionRow}>
       <div className={styles.actionTools}>
         <div className={styles.actionEntry}>
-          <Dropdown trigger='hover' onVisibleChange={setIsPlusDropdownOpen} droplist={menuContent}>
+    <Dropdown
+      trigger='hover'
+      onVisibleChange={(visible) => {
+        setIsPlusDropdownOpen(visible);
+        if (visible) {
+          onConfigMenuOpen?.();
+        }
+      }}
+      droplist={menuContent}
+    >
             <span className='flex items-center gap-4px cursor-pointer lh-[1]'>
               <Button
                 type='secondary'

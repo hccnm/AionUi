@@ -6,9 +6,9 @@
  * so existing renderer code works without changes.
  */
 
-import { authSessionStore } from '@/common/auth/session';
-import { expireAuthSession, fetchWithSaasAuth, fetchWsToken as fetchAuthenticatedWsToken } from '@/common/auth/http';
-import { getBackendBaseUrl, resolveHttpUrl, resolveWsUrl } from '@web/config/backend';
+import { fetchWithSaasAuth } from '@/common/auth/http';
+import { subscribeSharedWebSocket } from '@/common/adapter/sharedWebSocket';
+import { getBackendBaseUrl } from '@web/config/backend';
 
 // ---------------------------------------------------------------------------
 // Base URL
@@ -64,26 +64,6 @@ export function getBaseUrl(): string {
     return '';
   }
   return `http://127.0.0.1:${getBackendPort()}`;
-}
-
-function getWsUrl(): string {
-  const backendBaseUrl = getBackendBaseUrl();
-  if (backendBaseUrl) {
-    return resolveWsUrl(backendBaseUrl);
-  }
-  if (isWebUiBrowserMode()) {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${window.location.host}/ws`;
-  }
-  return `ws://127.0.0.1:${getBackendPort()}/ws`;
-}
-
-function getWsTokenUrl(): string {
-  const backendBaseUrl = getBackendBaseUrl();
-  if (backendBaseUrl) {
-    return resolveHttpUrl('/api/ws-token', backendBaseUrl);
-  }
-  return getWsUrl().replace(/^ws:/, 'http:').replace(/^wss:/, 'https:').replace(/\/ws$/, '/api/ws-token');
 }
 
 // ---------------------------------------------------------------------------
@@ -349,126 +329,6 @@ export function stubProvider<Data, Params = undefined>(name: string, defaultValu
 }
 
 // ---------------------------------------------------------------------------
-// WebSocket singleton
-// ---------------------------------------------------------------------------
-
-type WsCallback = (data: unknown) => void;
-const wsListeners = new Map<string, Set<WsCallback>>();
-let ws: WebSocket | null = null;
-let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let wsReconnectAttempt = 0;
-let wsShouldReconnect = true;
-
-function markWsAuthExpired(): void {
-  wsShouldReconnect = false;
-  if (wsReconnectTimer) {
-    clearTimeout(wsReconnectTimer);
-    wsReconnectTimer = null;
-  }
-  expireAuthSession(authSessionStore);
-}
-
-async function ensureWs(): Promise<void> {
-  if (typeof window === 'undefined') {
-    console.debug('[ensureWs] skipped: no window');
-    return;
-  }
-  wsShouldReconnect = authSessionStore.getToken() !== null;
-  if (!wsShouldReconnect) {
-    console.debug('[ensureWs] skipped: no auth token');
-    return;
-  }
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    console.debug('[ensureWs] skipped: already open/connecting, readyState=', ws.readyState);
-    return;
-  }
-
-  const url = getWsUrl();
-  console.debug('[ensureWs] connecting to', url);
-  try {
-    const wsToken = await fetchAuthenticatedWsToken({
-      url: getWsTokenUrl(),
-      sessionStore: authSessionStore,
-    });
-    ws = new WebSocket(url, [wsToken]);
-  } catch (e) {
-    if (!authSessionStore.getToken()) {
-      markWsAuthExpired();
-      return;
-    }
-    console.error('[ensureWs] WebSocket constructor threw:', e);
-    scheduleWsReconnect();
-    return;
-  }
-
-  const current = ws;
-
-  current.addEventListener('open', () => {
-    console.debug('[ensureWs] CONNECTED');
-    wsReconnectAttempt = 0;
-    wsShouldReconnect = true;
-  });
-
-  current.addEventListener('close', (e) => {
-    console.debug('[ensureWs] CLOSED code=' + e.code + ' reason=' + e.reason);
-    if (ws === current) ws = null;
-    if (e.code === 1008) {
-      markWsAuthExpired();
-      return;
-    }
-    scheduleWsReconnect();
-  });
-
-  current.addEventListener('error', (e) => {
-    console.error('[ensureWs] ERROR', e);
-    current.close();
-  });
-
-  current.addEventListener('message', (event: MessageEvent) => {
-    try {
-      const msg = JSON.parse(event.data as string) as {
-        name?: string;
-        event?: string;
-        data?: unknown;
-        payload?: unknown;
-      };
-      const eventName = msg.name ?? msg.event;
-      const payload = msg.data ?? msg.payload;
-      console.debug('[WS:msg]', eventName, JSON.stringify(payload).slice(0, 200));
-      if (eventName === 'auth-expired' || eventName === 'realtime.auth-failed') {
-        markWsAuthExpired();
-        current.close(1008, 'auth-expired');
-        return;
-      }
-      if (eventName) {
-        const handlers = wsListeners.get(eventName);
-        if (handlers) {
-          for (const h of handlers) {
-            try {
-              h(payload);
-            } catch {
-              /* never crash listener */
-            }
-          }
-        }
-      }
-    } catch {
-      // ignore non-JSON
-    }
-  });
-}
-
-function scheduleWsReconnect(): void {
-  if (wsReconnectTimer || !wsShouldReconnect) return;
-  const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempt), 30000);
-  wsReconnectAttempt++;
-  wsReconnectTimer = setTimeout(() => {
-    wsReconnectTimer = null;
-    void ensureWs();
-  }, delay);
-}
-
-// ---------------------------------------------------------------------------
 // Emitter factory (same shape as bridge.buildEmitter)
 // ---------------------------------------------------------------------------
 
@@ -480,15 +340,9 @@ type EmitterLike<Params> = {
 export function wsEmitter<Params = undefined>(eventName: string): EmitterLike<Params> {
   return {
     on: (callback: (params: Params) => void) => {
-      void ensureWs();
-      if (!wsListeners.has(eventName)) {
-        wsListeners.set(eventName, new Set());
-      }
-      const cb = callback as WsCallback;
-      wsListeners.get(eventName)!.add(cb);
-      return () => {
-        wsListeners.get(eventName)?.delete(cb);
-      };
+      return subscribeSharedWebSocket(eventName, (raw) => {
+        callback(raw as Params);
+      });
     },
     emit: (() => {}) as EmitterLike<Params>['emit'],
   };

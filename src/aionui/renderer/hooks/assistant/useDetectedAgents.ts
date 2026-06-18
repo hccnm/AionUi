@@ -1,6 +1,7 @@
 import { ipcBridge } from '@/common';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents } from '@/renderer/utils/model/agentTypes';
+import { STATIC_RESOURCE_SWR_OPTIONS } from '@/renderer/utils/swr/staticResource';
 import { useCallback, useMemo } from 'react';
 import useSWR, { mutate } from 'swr';
 
@@ -19,7 +20,11 @@ export type AvailableBackend = {
  * and `refreshAgentDetection` to trigger a re-scan.
  */
 export const useDetectedAgents = () => {
-  const { data: rawAgents = [] } = useSWR<AgentMetadata[]>(DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents);
+  const { data: rawAgents = [] } = useSWR<AgentMetadata[]>(
+    DETECTED_AGENTS_SWR_KEY,
+    fetchDetectedAgents,
+    STATIC_RESOURCE_SWR_OPTIONS
+  );
 
   const availableBackends = useMemo<AvailableBackend[]>(
     () =>
