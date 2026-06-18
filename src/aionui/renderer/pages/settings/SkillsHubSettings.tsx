@@ -48,12 +48,69 @@ interface SkillsHubSettingsProps {
   withWrapper?: boolean;
 }
 
+type SkillsHubData = {
+  availableSkills: SkillInfo[];
+  skillPaths: { user_skills_dir: string; builtin_skills_dir: string } | null;
+  builtinAutoSkills: Array<{ name: string; description: string }>;
+};
+
+let cachedSkillsHubData: SkillsHubData | null = null;
+let skillsHubDataInflight: Promise<SkillsHubData> | null = null;
+let cachedSkillsHubDataAt = 0;
+let skillsHubDataVersion = 0;
+const SKILLS_HUB_CACHE_TTL_MS = 5000;
+
+function invalidateSkillsHubDataCache(): void {
+  skillsHubDataVersion += 1;
+  cachedSkillsHubData = null;
+  skillsHubDataInflight = null;
+  cachedSkillsHubDataAt = 0;
+}
+
+async function loadSkillsHubData(force = false): Promise<SkillsHubData> {
+  if (!force && cachedSkillsHubData && Date.now() - cachedSkillsHubDataAt < SKILLS_HUB_CACHE_TTL_MS) {
+    return cachedSkillsHubData;
+  }
+  if (!force && skillsHubDataInflight) {
+    return skillsHubDataInflight;
+  }
+
+  const requestVersion = skillsHubDataVersion;
+  const request = Promise.all([
+    ipcBridge.fs.listAvailableSkills.invoke(),
+    ipcBridge.fs.getSkillPaths.invoke(),
+    ipcBridge.fs.listBuiltinAutoSkills.invoke(),
+  ])
+    .then(([availableSkills, skillPaths, builtinAutoSkills]) => {
+      const result: SkillsHubData = {
+        availableSkills,
+        skillPaths,
+        builtinAutoSkills,
+      };
+      if (requestVersion !== skillsHubDataVersion) {
+        return cachedSkillsHubData ?? result;
+      }
+      cachedSkillsHubData = result;
+      cachedSkillsHubDataAt = Date.now();
+      return result;
+    })
+    .finally(() => {
+      if (skillsHubDataInflight === request) {
+        skillsHubDataInflight = null;
+      }
+    });
+
+  skillsHubDataInflight = request;
+  return request;
+}
+
 const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = true }) => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightName = searchParams.get('highlight');
   const [highlightedSkill, setHighlightedSkill] = useState<string | null>(null);
   const skillRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const latestFetchIdRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([]);
   const [skillPaths, setSkillPaths] = useState<{ user_skills_dir: string; builtin_skills_dir: string } | null>(null);
@@ -72,22 +129,28 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
     );
   }, [mySkills, search_query]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (force = false) => {
+    const fetchId = latestFetchIdRef.current + 1;
+    latestFetchIdRef.current = fetchId;
     setLoading(true);
     try {
-      const skills = await ipcBridge.fs.listAvailableSkills.invoke();
-      setAvailableSkills(skills);
-
-      const paths = await ipcBridge.fs.getSkillPaths.invoke();
-      setSkillPaths(paths);
-
-      const autoSkills = await ipcBridge.fs.listBuiltinAutoSkills.invoke();
-      setBuiltinAutoSkills(autoSkills);
+      const data = await loadSkillsHubData(force);
+      if (latestFetchIdRef.current !== fetchId) {
+        return;
+      }
+      setAvailableSkills(data.availableSkills);
+      setSkillPaths(data.skillPaths);
+      setBuiltinAutoSkills(data.builtinAutoSkills);
     } catch (error) {
+      if (latestFetchIdRef.current !== fetchId) {
+        return;
+      }
       console.error('Failed to fetch skills:', error);
       Message.error(t('settings.skillsHub.fetchError', { defaultValue: 'Failed to fetch skills' }));
     } finally {
-      setLoading(false);
+      if (latestFetchIdRef.current === fetchId) {
+        setLoading(false);
+      }
     }
   }, [t]);
 
@@ -131,7 +194,8 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
         })
       );
       setSearchQuery('');
-      void fetchData();
+      invalidateSkillsHubDataCache();
+      void fetchData(true);
     } catch (error) {
       console.error('Failed to import skill:', error);
       Message.error(t('settings.skillsHub.importError', { defaultValue: 'Error importing skill' }));
@@ -142,7 +206,8 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
     try {
       await ipcBridge.fs.deleteSkill.invoke({ skill_name: skillName });
       Message.success(t('settings.skillsHub.deleteSuccess', { defaultValue: 'Skill deleted' }));
-      void fetchData();
+      invalidateSkillsHubDataCache();
+      void fetchData(true);
     } catch (error) {
       console.error('Failed to delete skill:', error);
       Message.error(t('settings.skillsHub.deleteError', { defaultValue: 'Error deleting skill' }));
@@ -184,7 +249,8 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
                 data-testid='btn-refresh-my-skills'
                 className='outline-none border-none bg-transparent cursor-pointer p-6px text-t-tertiary hover:text-primary-6 transition-colors rd-full hover:bg-fill-2 ml-4px'
                 onClick={async () => {
-                  await fetchData();
+                  invalidateSkillsHubDataCache();
+                  await fetchData(true);
                   Message.success(t('common.refreshSuccess', { defaultValue: 'Refreshed' }));
                 }}
                 title={t('common.refresh', { defaultValue: 'Refresh' })}

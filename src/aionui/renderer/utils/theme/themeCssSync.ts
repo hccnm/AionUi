@@ -19,6 +19,11 @@ export const setExtensionThemesCache = (themes: ICssTheme[]): void => {
   extensionThemesCache = themes;
 };
 
+/** Clear the extension themes cache when extension state changes */
+export const clearExtensionThemesCache = (): void => {
+  extensionThemesCache = [];
+};
+
 /** Get the current extension themes cache */
 export const getExtensionThemesCache = (): ICssTheme[] => extensionThemesCache;
 

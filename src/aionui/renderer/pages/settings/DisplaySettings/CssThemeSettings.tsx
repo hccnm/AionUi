@@ -9,10 +9,14 @@ import type { ICssTheme } from '@/common/config/storage';
 import { ipcBridge } from '@/common';
 import { uuid } from '@/common/utils';
 import { useThemeContext } from '@renderer/hooks/context/ThemeContext.tsx';
-import { resolveCssByActiveTheme, setExtensionThemesCache } from '@renderer/utils/theme/themeCssSync';
+import {
+  clearExtensionThemesCache,
+  resolveCssByActiveTheme,
+  setExtensionThemesCache,
+} from '@renderer/utils/theme/themeCssSync';
 import { Button, Message, Modal } from '@arco-design/web-react';
 import { EditTwo, Plus, CheckOne } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import CssThemeModal from './CssThemeModal.tsx';
 import { PRESET_THEMES, DEFAULT_THEME_ID } from './presets.ts';
@@ -238,6 +242,84 @@ const dispatchCustomCssUpdated = (css: string) => {
   window.dispatchEvent(new CustomEvent('custom-css-updated', { detail: { customCss: css } }));
 };
 
+let cachedExtensionThemes: ICssTheme[] | null = null;
+let extensionThemesInflight: Promise<ICssTheme[]> | null = null;
+let extensionThemesStateUnsubscribe: (() => void) | null = null;
+let extensionThemesVersion = 0;
+const extensionThemesSubscribers = new Set<() => void>();
+
+function notifyExtensionThemesSubscribers(): void {
+  for (const listener of extensionThemesSubscribers) {
+    listener();
+  }
+}
+
+function subscribeExtensionThemes(listener: () => void): () => void {
+  extensionThemesSubscribers.add(listener);
+  return () => {
+    extensionThemesSubscribers.delete(listener);
+  };
+}
+
+function invalidateExtensionThemesCache(): void {
+  extensionThemesVersion += 1;
+  cachedExtensionThemes = null;
+  extensionThemesInflight = null;
+  clearExtensionThemesCache();
+}
+
+function ensureExtensionThemesStateListener(): void {
+  if (extensionThemesStateUnsubscribe) {
+    return;
+  }
+  extensionThemesStateUnsubscribe = ipcBridge.extensions.stateChanged.on(() => {
+    invalidateExtensionThemesCache();
+    void loadExtensionThemes(true);
+  });
+}
+
+async function loadExtensionThemes(force = false): Promise<ICssTheme[]> {
+  ensureExtensionThemesStateListener();
+
+  if (!force && cachedExtensionThemes) {
+    return cachedExtensionThemes;
+  }
+  if (!force && extensionThemesInflight) {
+    return extensionThemesInflight;
+  }
+
+  const requestVersion = extensionThemesVersion;
+  const request = ipcBridge.extensions.getThemes
+    .invoke()
+    .then((loadedExtensionThemes) => {
+      const result = loadedExtensionThemes.map((theme) => ({
+        ...theme,
+        cover: resolveExtensionAssetUrl(theme.cover),
+      }));
+      if (requestVersion !== extensionThemesVersion) {
+        return cachedExtensionThemes ?? [];
+      }
+      cachedExtensionThemes = result;
+      setExtensionThemesCache(result);
+      notifyExtensionThemesSubscribers();
+      return result;
+    })
+    .catch((error) => {
+      if (cachedExtensionThemes) {
+        return cachedExtensionThemes;
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (extensionThemesInflight === request) {
+        extensionThemesInflight = null;
+      }
+    });
+
+  extensionThemesInflight = request;
+  return request;
+}
+
 /**
  * CSS 主题设置组件 / CSS Theme Settings Component
  * 用于管理和切换 CSS 皮肤主题 / For managing and switching CSS skin themes
@@ -250,6 +332,7 @@ const CssThemeSettings: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTheme, setEditingTheme] = useState<ICssTheme | null>(null);
   const [hoveredThemeId, setHoveredThemeId] = useState<string | null>(null);
+  const latestLoadIdRef = useRef(0);
   const themePreviewPalettes = useMemo(() => {
     const map = new Map<string, ThemePreviewPalette>();
     themes.forEach((cssTheme) => {
@@ -257,82 +340,94 @@ const CssThemeSettings: React.FC = () => {
     });
     return map;
   }, [themes, currentTheme]);
+  const loadThemes = useCallback(async () => {
+    const loadId = latestLoadIdRef.current + 1;
+    latestLoadIdRef.current = loadId;
+    try {
+      const savedThemes = configService.get('css.themes') || [];
+      const { normalized, updated } = normalizeUserThemes(savedThemes);
+      const activeId = configService.get('css.activeThemeId');
+
+      if (updated) {
+        await configService.set(
+          'css.themes',
+          normalized.filter((t) => !t.is_preset)
+        );
+      }
+
+      // 对预设主题也应用背景图 CSS 处理 / Apply background CSS processing to preset themes as well
+      const normalizedPresets = PRESET_THEMES.map((theme) => ensureBackgroundCss(theme));
+
+      // 加载扩展主题 / Load extension-contributed themes
+      let extensionThemes: ICssTheme[] = [];
+      try {
+        extensionThemes = await loadExtensionThemes();
+      } catch {
+        // Extensions not available (e.g., WebUI mode or not initialized yet)
+      }
+      if (latestLoadIdRef.current !== loadId) {
+        return;
+      }
+
+      // 合并预设主题、扩展主题和用户主题，按 ID 去重（先出现的优先）
+      // Merge preset, extension, and user themes; deduplicate by ID (first occurrence wins)
+      const seenIds = new Set<string>();
+      const allThemes: ICssTheme[] = [];
+      for (const theme of [...normalizedPresets, ...extensionThemes, ...normalized.filter((t) => !t.is_preset)]) {
+        if (!theme?.id || seenIds.has(theme.id)) continue;
+        seenIds.add(theme.id);
+        allThemes.push(theme);
+      }
+
+      const resolvedActiveId = activeId || DEFAULT_THEME_ID;
+      const activeTheme = allThemes.find((theme) => theme.id === resolvedActiveId);
+
+      // 如果激活主题不存在（扩展被移除等），回退到默认主题
+      // If active theme no longer exists (extension removed etc.), fall back to default
+      let effectiveActiveId = resolvedActiveId;
+      if (!activeTheme && resolvedActiveId !== DEFAULT_THEME_ID) {
+        effectiveActiveId = DEFAULT_THEME_ID;
+        // Persist the fallback so we don't repeat this on every mount
+        await configService.set('css.activeThemeId', effectiveActiveId);
+      }
+      if (latestLoadIdRef.current !== loadId) {
+        return;
+      }
+
+      const expectedCss = resolveCssByActiveTheme(
+        effectiveActiveId,
+        normalized.filter((theme) => !theme.is_preset)
+      );
+      if (latestLoadIdRef.current !== loadId) {
+        return;
+      }
+
+      setThemes(allThemes);
+      setActiveThemeId(effectiveActiveId);
+
+      // Self-heal potential split-brain state (activeThemeId != customCss) caused by partial IPC write failures.
+      const savedCustomCss = configService.get('customCss') || '';
+      if (savedCustomCss !== expectedCss) {
+        await configService.set('customCss', expectedCss);
+        if (latestLoadIdRef.current !== loadId) {
+          return;
+        }
+        // Only dispatch when CSS actually changed to avoid redundant re-renders
+        dispatchCustomCssUpdated(expectedCss);
+      }
+    } catch (error) {
+      console.error('Failed to load CSS themes:', error);
+    }
+  }, []);
+
   // 加载主题列表和激活状态 / Load theme list and active state
   useEffect(() => {
-    const loadThemes = async () => {
-      try {
-        const savedThemes = configService.get('css.themes') || [];
-        const { normalized, updated } = normalizeUserThemes(savedThemes);
-        const activeId = configService.get('css.activeThemeId');
-
-        if (updated) {
-          await configService.set(
-            'css.themes',
-            normalized.filter((t) => !t.is_preset)
-          );
-        }
-
-        // 对预设主题也应用背景图 CSS 处理 / Apply background CSS processing to preset themes as well
-        const normalizedPresets = PRESET_THEMES.map((theme) => ensureBackgroundCss(theme));
-
-        // 加载扩展主题 / Load extension-contributed themes
-        let extensionThemes: ICssTheme[] = [];
-        try {
-          const loadedExtensionThemes = await ipcBridge.extensions.getThemes.invoke();
-          // Normalize extension asset URLs for current runtime (Electron/WebUI)
-          extensionThemes = loadedExtensionThemes.map((theme) => ({
-            ...theme,
-            cover: resolveExtensionAssetUrl(theme.cover),
-          }));
-          // Update cache so themeCssSync can resolve extension themes without async IPC
-          setExtensionThemesCache(extensionThemes);
-        } catch {
-          // Extensions not available (e.g., WebUI mode or not initialized yet)
-        }
-
-        // 合并预设主题、扩展主题和用户主题，按 ID 去重（先出现的优先）
-        // Merge preset, extension, and user themes; deduplicate by ID (first occurrence wins)
-        const seenIds = new Set<string>();
-        const allThemes: ICssTheme[] = [];
-        for (const theme of [...normalizedPresets, ...extensionThemes, ...normalized.filter((t) => !t.is_preset)]) {
-          if (!theme?.id || seenIds.has(theme.id)) continue;
-          seenIds.add(theme.id);
-          allThemes.push(theme);
-        }
-
-        const resolvedActiveId = activeId || DEFAULT_THEME_ID;
-        const activeTheme = allThemes.find((theme) => theme.id === resolvedActiveId);
-
-        // 如果激活主题不存在（扩展被移除等），回退到默认主题
-        // If active theme no longer exists (extension removed etc.), fall back to default
-        let effectiveActiveId = resolvedActiveId;
-        if (!activeTheme && resolvedActiveId !== DEFAULT_THEME_ID) {
-          effectiveActiveId = DEFAULT_THEME_ID;
-          // Persist the fallback so we don't repeat this on every mount
-          await configService.set('css.activeThemeId', effectiveActiveId);
-        }
-
-        const expectedCss = resolveCssByActiveTheme(
-          effectiveActiveId,
-          normalized.filter((theme) => !theme.is_preset)
-        );
-
-        setThemes(allThemes);
-        setActiveThemeId(effectiveActiveId);
-
-        // Self-heal potential split-brain state (activeThemeId != customCss) caused by partial IPC write failures.
-        const savedCustomCss = configService.get('customCss') || '';
-        if (savedCustomCss !== expectedCss) {
-          await configService.set('customCss', expectedCss);
-          // Only dispatch when CSS actually changed to avoid redundant re-renders
-          dispatchCustomCssUpdated(expectedCss);
-        }
-      } catch (error) {
-        console.error('Failed to load CSS themes:', error);
-      }
-    };
+    const unsubscribe = subscribeExtensionThemes(() => {
+      void loadThemes();
+    });
     void loadThemes();
-  }, []);
+    return unsubscribe;
+  }, [loadThemes]);
 
   /**
    * 应用主题 CSS / Apply theme CSS
