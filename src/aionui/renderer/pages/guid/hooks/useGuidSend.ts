@@ -25,6 +25,8 @@ export type GuidSendDeps = {
   setFiles: React.Dispatch<React.SetStateAction<string[]>>;
   dir: string;
   setDir: React.Dispatch<React.SetStateAction<string>>;
+  workspaceId?: string;
+  workspaceArchived?: boolean;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
   loading: boolean;
 
@@ -87,6 +89,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     setFiles,
     dir,
     setDir,
+    workspaceId,
+    workspaceArchived,
     setLoading,
     loading,
     selectedAgent,
@@ -163,6 +167,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         agent_name: openclawAgentInfo?.name,
         preset_assistant_id,
         workspace: finalWorkspace,
+        workspace_id: workspaceId,
         model: current_model!,
         cli_path: openclawAgentInfo?.cli_path,
         custom_agent_id: openclawAgentInfo?.custom_agent_id,
@@ -219,6 +224,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         agent_name: nanobotAgentInfo?.name,
         preset_assistant_id,
         workspace: finalWorkspace,
+        workspace_id: workspaceId,
         model: current_model!,
         custom_agent_id: nanobotAgentInfo?.custom_agent_id,
         custom_workspace: isCustomWorkspace,
@@ -267,10 +273,11 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         const conversation = await ipcBridge.conversation.create.invoke({
           type: 'aionrs',
           name: input,
+          workspace_id: workspaceId,
           model: current_model,
           extra: {
             default_files: files,
-            workspace: finalWorkspace,
+            ...(workspaceId ? {} : { workspace: finalWorkspace }),
             custom_workspace: isCustomWorkspace,
             preset_rules: is_preset ? preset_rules : undefined,
             preset_enabled_skills: enabled_skills_to_send,
@@ -341,6 +348,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         agent_name: acpAgentInfo?.name,
         preset_assistant_id,
         workspace: finalWorkspace,
+        workspace_id: workspaceId,
         model: current_model!,
         cli_path: acpAgentInfo?.cli_path,
         custom_agent_id: acpAgentInfo?.custom_agent_id,
@@ -399,6 +407,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     input,
     files,
     dir,
+    workspaceId,
+    workspaceArchived,
     selectedAgent,
     selectedAgentKey,
     selectedAgentInfo,
@@ -456,7 +466,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   ]);
 
   // Calculate button disabled state
-  const isButtonDisabled = loading || !input.trim();
+  const isButtonDisabled = loading || !input.trim() || workspaceArchived === true;
 
   return {
     handleSend,

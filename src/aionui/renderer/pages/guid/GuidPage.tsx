@@ -6,6 +6,10 @@
 
 import { ipcBridge } from '@/common';
 import type { IMcpServer } from '@/common/config/storage';
+import {
+  workspaceResourceAdapter,
+  type WorkspaceResource,
+} from '@/common/resources/workspaceResources';
 import { resolveLocaleKey } from '@/common/utils';
 
 import { useInputFocusRing } from '@/renderer/hooks/chat/useInputFocusRing';
@@ -56,6 +60,8 @@ const GuidPage: React.FC = () => {
   const [guidEnabledSkills, setGuidEnabledSkills] = useState<string[] | undefined>(undefined);
   const [availableMcpServers, setAvailableMcpServers] = useState<IMcpServer[]>([]);
   const [guidSelectedMcpServerIds, setGuidSelectedMcpServerIds] = useState<string[] | undefined>(undefined);
+  const [workspaceResources, setWorkspaceResources] = useState<WorkspaceResource[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(undefined);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [mcpCatalogLoaded, setMcpCatalogLoaded] = useState(false);
 
@@ -141,6 +147,31 @@ const GuidPage: React.FC = () => {
   const guidInput = useGuidInput({
     locationState: location.state as { workspace?: string } | null,
   });
+  const selectedWorkspace = useMemo(
+    () => workspaceResources.find((workspace) => workspace.id === selectedWorkspaceId),
+    [selectedWorkspaceId, workspaceResources]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    workspaceResourceAdapter
+      .listWorkspaces()
+      .then((result) => {
+        if (cancelled) return;
+        setWorkspaceResources(result.items);
+        const firstActive = result.items.find((workspace) => workspace.status !== 'archived');
+        if (firstActive && !selectedWorkspaceId && !guidInput.dir) {
+          setSelectedWorkspaceId(firstActive.id);
+          guidInput.setDir(firstActive.name);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load workspaces:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [guidInput.dir, guidInput.setDir, selectedWorkspaceId]);
 
   const mention = useGuidMention({
     availableAgents: agentSelection.availableAgents,
@@ -159,6 +190,8 @@ const GuidPage: React.FC = () => {
     setFiles: guidInput.setFiles,
     dir: guidInput.dir,
     setDir: guidInput.setDir,
+    workspaceId: selectedWorkspaceId,
+    workspaceArchived: selectedWorkspace?.status === 'archived',
     setLoading: guidInput.setLoading,
     loading: guidInput.loading,
 
@@ -790,8 +823,20 @@ const GuidPage: React.FC = () => {
             onRemoveFile={guidInput.handleRemoveFile}
             actionRow={actionRowNode}
             workspaceDir={guidInput.dir}
-            onSelectWorkspace={(dir) => guidInput.setDir(dir)}
-            onClearWorkspace={() => guidInput.setDir('')}
+            workspaceResources={workspaceResources}
+            selectedWorkspaceId={selectedWorkspaceId}
+            onSelectWorkspace={(dir) => {
+              guidInput.setDir(dir);
+              setSelectedWorkspaceId(undefined);
+            }}
+            onSelectWorkspaceResource={(workspace) => {
+              setSelectedWorkspaceId(workspace.id);
+              guidInput.setDir(workspace.name);
+            }}
+            onClearWorkspace={() => {
+              guidInput.setDir('');
+              setSelectedWorkspaceId(undefined);
+            }}
           />
 
           <AssistantSelectionArea

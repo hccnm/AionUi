@@ -12,6 +12,7 @@ import { Input } from '@arco-design/web-react';
 import React from 'react';
 import styles from '../index.module.css';
 import GuidWorkspaceFootnote from './GuidWorkspaceFootnote';
+import type { WorkspaceResource } from '@/common/resources/workspaceResources';
 
 type GuidInputCardProps = {
   // Input state
@@ -45,7 +46,10 @@ type GuidInputCardProps = {
 
   // Workspace
   workspaceDir: string;
+  workspaceResources?: WorkspaceResource[];
+  selectedWorkspaceId?: string;
   onSelectWorkspace: (dir: string) => void;
+  onSelectWorkspaceResource?: (workspace: WorkspaceResource) => void;
   onClearWorkspace: () => void;
 };
 
@@ -70,7 +74,10 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
   onRemoveFile,
   actionRow,
   workspaceDir,
+  workspaceResources,
+  selectedWorkspaceId,
   onSelectWorkspace,
+  onSelectWorkspaceResource,
   onClearWorkspace,
 }) => {
   const layout = useLayoutContext();
@@ -150,11 +157,14 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
         <UploadProgressBar source='sendbox' />
         {actionRow}
       </div>
-      <GuidWorkspaceFootnote
-        workspaceDir={workspaceDir}
-        onSelectWorkspace={onSelectWorkspace}
-        onClearWorkspace={onClearWorkspace}
-      />
+          <GuidWorkspaceFootnote
+            workspaceDir={workspaceDir}
+            workspaceResources={workspaceResources}
+            selectedWorkspaceId={selectedWorkspaceId}
+            onSelectWorkspace={onSelectWorkspace}
+            onSelectWorkspaceResource={onSelectWorkspaceResource}
+            onClearWorkspace={onClearWorkspace}
+          />
     </div>
   );
 };

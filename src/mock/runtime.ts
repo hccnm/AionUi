@@ -16,7 +16,8 @@ type MockConversation = {
   type: 'remote';
   status: 'finished';
   extra: {
-    workspace: string;
+    workspace?: string;
+    display_path?: string;
     custom_workspace: boolean;
     pinned?: boolean;
     pinned_at?: number;
@@ -27,6 +28,111 @@ type MockConversation = {
     model: string;
     use_model: string;
   };
+  workspace_id?: string;
+};
+
+type MockSshCredential = {
+  id: string;
+  name: string;
+  public_key: string;
+  fingerprint: string;
+  created_at: string;
+};
+
+type MockGitProject = {
+  id: string;
+  display_name: string;
+  repo_ssh_url: string;
+  default_branch: string;
+  credential_id: string;
+  status: string;
+  created_at: string | number;
+  updated_at: string | number;
+  last_synced_at?: string | number | null;
+};
+
+type MockWorkspaceResource = {
+  id: string;
+  name: string;
+  status: 'active' | 'archived';
+  source_type: 'blank' | 'git_project';
+  git_project_id?: string | null;
+  branch_ref?: string | null;
+  root_rel_path?: string | null;
+  display_path?: string;
+  created_at: string | number;
+  updated_at: string | number;
+};
+
+type MockAdminRole = {
+  id: string;
+  role_key: string;
+  role_name: string;
+  description?: string;
+  permissions: string[];
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type MockAdminUser = {
+  id: string;
+  phone: string;
+  display_name: string;
+  avatar_url: string | null;
+  status: 'enabled' | 'disabled';
+  roles: MockAdminRole[];
+  external_identities: Array<{ provider: string; external_user_id: string; display_name?: string }>;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+};
+
+type MockWorkspaceFile = {
+  path: string;
+  content: string;
+  version: number;
+  modified_at: string;
+};
+
+type MockTerminalSession = {
+  id: string;
+  workspace_id: string;
+  cwd: string;
+  status: 'running' | 'closed';
+  created_at: string;
+};
+
+type MockExecution = {
+  id: string;
+  workspace_id: string;
+  execution_type: 'test_run' | 'preview_env';
+  kind?: 'test_run' | 'preview_env';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'waiting_approval';
+  title?: string;
+  command?: string;
+  relative_path?: string;
+  preview_url?: string;
+  expires_at?: string;
+  approval_state?: 'none' | 'required' | 'approved';
+  logs: Array<{ id: string; level: 'info' | 'warn' | 'error'; message: string; timestamp: string }>;
+  artifacts: MockExecutionArtifact[];
+  created_at: string;
+  updated_at: string;
+};
+
+type MockExecutionArtifact = {
+  id: string;
+  execution_id: string;
+  name?: string;
+  artifact_type: string;
+  ref_: string;
+  metadata?: Record<string, unknown>;
+  size?: number;
+  mime_type?: string;
+  status: 'ready';
+  immutable: boolean;
+  created_at: string;
 };
 
 type MockTextMessage = {
@@ -60,6 +166,14 @@ type MockState = {
   accessToken: string | null;
   wsToken: string | null;
   settings: Record<string, unknown>;
+  sshCredentials: MockSshCredential[];
+  gitProjects: MockGitProject[];
+  workspaces: MockWorkspaceResource[];
+  adminRoles: MockAdminRole[];
+  adminUsers: MockAdminUser[];
+  workspaceFiles: Record<string, Record<string, MockWorkspaceFile>>;
+  terminalSessions: Record<string, MockTerminalSession[]>;
+  executions: Record<string, MockExecution[]>;
   conversations: MockConversation[];
   messages: Record<string, MockDbMessage[]>;
   artifacts: Record<string, IConversationArtifact[]>;
@@ -504,6 +618,35 @@ function createMockAssistant() {
 const createInitialState = (): MockState => {
   const now = Date.now();
   const conversation = createInitialConversation(now);
+  const nowIso = new Date(now).toISOString();
+  const adminRole: MockAdminRole = {
+    id: 'role_admin',
+    role_key: 'admin',
+    role_name: '管理员',
+    description: 'System administrator',
+    permissions: [
+      'admin:user:list',
+      'admin:user:update',
+      'admin:user:reset-password',
+      'admin:user:assign-role',
+      'admin:role:list',
+      'admin:role:create',
+      'admin:role:update',
+    ],
+    is_system: true,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+  const viewerRole: MockAdminRole = {
+    id: 'role_viewer',
+    role_key: 'viewer',
+    role_name: 'Viewer',
+    description: 'Read only user',
+    permissions: [],
+    is_system: false,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
 
   return {
     nextId: 1,
@@ -514,6 +657,78 @@ const createInitialState = (): MockState => {
     settings: {
       language: 'zh-CN',
       theme: 'light',
+    },
+    sshCredentials: [
+      {
+        id: 'ssh-demo',
+        name: 'Demo SSH',
+        public_key: 'ssh-ed25519 AAAA mock',
+        fingerprint: 'SHA256:mock',
+        created_at: new Date(now).toISOString(),
+      },
+    ],
+    gitProjects: [
+      {
+        id: 'git-demo',
+        display_name: 'Aion Web',
+        repo_ssh_url: 'git@github.com:office-ai/aion-web.git',
+        default_branch: 'main',
+        credential_id: 'ssh-demo',
+        status: 'active',
+        created_at: new Date(now).toISOString(),
+        updated_at: new Date(now).toISOString(),
+      },
+    ],
+    workspaces: [
+      {
+        id: 'ws-demo',
+        name: 'Aion Web Main',
+        status: 'active',
+        source_type: 'git_project',
+        display_path: 'aion-web/main',
+        git_project_id: 'git-demo',
+        branch_ref: 'main',
+        root_rel_path: 'workspaces/ws-demo/repo',
+        created_at: new Date(now).toISOString(),
+        updated_at: new Date(now).toISOString(),
+      },
+    ],
+    adminRoles: [adminRole, viewerRole],
+    adminUsers: [
+      {
+        id: 'user-demo',
+        phone: '13800138000',
+        display_name: '13800138000',
+        avatar_url: null,
+        status: 'enabled',
+        roles: [adminRole],
+        external_identities: [{ provider: 'password', external_user_id: '13800138000' }],
+        created_at: nowIso,
+        updated_at: nowIso,
+        last_login_at: nowIso,
+      },
+    ],
+    workspaceFiles: {
+      'ws-demo': {
+        'README.md': {
+          path: 'README.md',
+          content: '# Aion Web\n\nMock workspace README.',
+          version: 1,
+          modified_at: new Date(now).toISOString(),
+        },
+        'src/index.ts': {
+          path: 'src/index.ts',
+          content: 'export const runtime = "mock";',
+          version: 1,
+          modified_at: new Date(now).toISOString(),
+        },
+      },
+    },
+    terminalSessions: {
+      'ws-demo': [],
+    },
+    executions: {
+      'ws-demo': [],
     },
     conversations: [conversation],
     messages: {
@@ -574,6 +789,20 @@ function createAccessToken(username: string): string {
   return `mock-access-token:${username}:${Date.now()}`;
 }
 
+function toPhase2CurrentUser(user: MockUser) {
+  return {
+    id: user.id,
+    phone: user.username,
+    username: user.username,
+    display_name: user.username,
+    roles: mockState.adminRoles
+      .filter((role) => role.role_key === 'admin')
+      .map((role) => ({ id: role.id, role_key: role.role_key, role_name: role.role_name, permissions: ['*'] })),
+    permission_flags: ['*', 'admin:user:list', 'admin:user:update', 'admin:role:list', 'admin:role:update'],
+    is_admin: true,
+  };
+}
+
 function createWsToken(): string {
   return `mock-ws-token:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 }
@@ -608,6 +837,123 @@ function broadcast(name: string, data: unknown): void {
   for (const listener of mockState.socketListeners) {
     listener(payload);
   }
+}
+
+function sanitizeRelativePath(path: string | null | undefined): string {
+  const normalized = (path || '.').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/');
+  if (!normalized || normalized === '.') return '.';
+  const segments = normalized.split('/').filter((segment) => segment && segment !== '.' && segment !== '..');
+  return segments.join('/') || '.';
+}
+
+function joinRelativePath(parent: string, child: string): string {
+  const safeParent = sanitizeRelativePath(parent);
+  const safeChild = sanitizeRelativePath(child);
+  return safeParent === '.' ? safeChild : `${safeParent}/${safeChild}`;
+}
+
+function listWorkspaceFiles(
+  workspaceId: string,
+  path: string
+): Array<{ name: string; relative_path: string; kind: 'file' | 'directory'; version?: string; updated_at?: string; size?: number }> {
+  const safePath = sanitizeRelativePath(path);
+  const prefix = safePath === '.' ? '' : `${safePath}/`;
+  const files = mockState.workspaceFiles[workspaceId] ?? {};
+  const entries = new Map<
+    string,
+    { name: string; relative_path: string; kind: 'file' | 'directory'; version?: string; updated_at?: string; size?: number }
+  >();
+
+  for (const item of Object.values(files)) {
+    if (!item.path.startsWith(prefix)) continue;
+    const rest = item.path.slice(prefix.length);
+    if (!rest) continue;
+    const [first, ...remaining] = rest.split('/');
+    const entryPath = prefix ? `${prefix}${first}` : first;
+    if (remaining.length > 0) {
+      entries.set(entryPath, { name: first, relative_path: entryPath, kind: 'directory' });
+    } else {
+      entries.set(entryPath, {
+        name: first,
+        relative_path: entryPath,
+        kind: 'file',
+        version: `v${item.version}`,
+        updated_at: item.modified_at,
+        size: item.content.length,
+      });
+    }
+  }
+
+  return [...entries.values()].sort((left, right) => left.kind.localeCompare(right.kind) || left.name.localeCompare(right.name));
+}
+
+function createExecutionArtifact(executionId: string, workspaceId: string): MockExecutionArtifact {
+  const artifactId = nextId('artifact');
+  return {
+    id: artifactId,
+    execution_id: executionId,
+    name: 'runtime-report.zip',
+    artifact_type: 'report',
+    ref_: `workspaces/${workspaceId}/executions/${executionId}/runtime-report.zip`,
+    metadata: { workspace_id: workspaceId },
+    size: 1024,
+    mime_type: 'application/zip',
+    status: 'ready',
+    immutable: true,
+    created_at: new Date().toISOString(),
+  };
+}
+
+function createWorkspaceExecution(
+  workspaceId: string,
+  payload: {
+    execution_type?: 'test_run' | 'preview_env';
+    kind?: 'test_run' | 'preview_env';
+    relative_path?: string;
+    command?: string;
+    title?: string;
+  }
+): MockExecution {
+  const now = new Date().toISOString();
+  const executionId = nextId('exec');
+  const artifact = createExecutionArtifact(executionId, workspaceId);
+  const executionType = payload.execution_type ?? payload.kind ?? 'test_run';
+  const execution: MockExecution = {
+    id: executionId,
+    workspace_id: workspaceId,
+    execution_type: executionType,
+    kind: executionType,
+    status: 'running',
+    title: payload.title,
+    command: payload.command,
+    relative_path: sanitizeRelativePath(payload.relative_path),
+    preview_url: executionType === 'preview_env' ? `https://preview.aionweb.mock/${executionId}` : undefined,
+    expires_at: executionType === 'preview_env' ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : undefined,
+    approval_state: 'none',
+    logs: [{ id: nextId('log'), level: 'info', message: 'Execution started', timestamp: now }],
+    artifacts: [artifact],
+    created_at: now,
+    updated_at: now,
+  };
+  mockState.executions[workspaceId] = [execution, ...(mockState.executions[workspaceId] ?? [])];
+  setTimeout(() => {
+    broadcast('workspace.execution.event', {
+      type: 'status',
+      workspace_id: workspaceId,
+      execution_id: executionId,
+      status: execution.status,
+      preview_url: execution.preview_url,
+      expires_at: execution.expires_at,
+      approval_state: execution.approval_state,
+    });
+    broadcast('workspace.execution.event', {
+      type: 'artifact',
+      workspace_id: workspaceId,
+      execution_id: executionId,
+      artifact,
+    });
+  }, 0);
+  return execution;
 }
 
 function emitConversationListChanged(conversation_id: string, action: 'created' | 'updated' | 'deleted'): void {
@@ -763,25 +1109,19 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
     }
 
     mockState.accessToken = createAccessToken(mockState.currentUser?.username ?? 'demo');
-    return jsonResponse({ success: true, token: mockState.accessToken });
+    return jsonResponse({ code: 0, message: 'ok', data: { token: mockState.accessToken }, trace_id: null });
   }
 
-  if (pathname === '/api/auth/user' && method === 'GET') {
+  if (pathname === '/api/auth/me' && method === 'GET') {
     if (!hasValidBearerAuth(init) || !mockState.currentUser) {
-      return jsonResponse({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return jsonResponse({ code: 401, message: 'Unauthorized', data: null, trace_id: null }, { status: 401 });
     }
-    return jsonResponse(
-      mockState.currentUser
-        ? { success: true, user: mockState.currentUser }
-        : {
-            success: false,
-          }
-    );
+    return jsonResponse({ code: 0, message: 'ok', data: toPhase2CurrentUser(mockState.currentUser), trace_id: null });
   }
 
-  if (pathname === '/login' && method === 'POST') {
+  if (pathname === '/api/auth/login' && method === 'POST') {
     if (mockState.needsSetup) {
-      return jsonResponse({ success: false, error: 'SETUP_REQUIRED' }, { status: 409 });
+      return jsonResponse({ code: 'SETUP_REQUIRED', message: 'SETUP_REQUIRED' }, { status: 409 });
     }
     const username =
       body && typeof body === 'object' && typeof (body as { username?: unknown }).username === 'string'
@@ -789,14 +1129,25 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
         : 'demo';
     mockState.currentUser = { id: 'user-demo', username };
     mockState.accessToken = createAccessToken(username);
-    return jsonResponse({ success: true, user: mockState.currentUser, token: mockState.accessToken, message: 'Login successful' });
+    return jsonResponse({
+      code: 0,
+      message: 'ok',
+      data: {
+        token: mockState.accessToken,
+        user: {
+          id: mockState.currentUser.id,
+          username,
+        },
+      },
+      trace_id: null,
+    });
   }
 
-  if (pathname === '/logout' && method === 'POST') {
+  if (pathname === '/api/auth/logout' && method === 'POST') {
     mockState.currentUser = null;
     mockState.accessToken = null;
     mockState.wsToken = null;
-    return jsonResponse({ success: true });
+    return jsonResponse({ code: 0, message: 'ok', data: null });
   }
 
   if (pathname === '/api/auth/change-password' && method === 'POST') {
@@ -831,6 +1182,142 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
       ws_token: mockState.wsToken,
       expires_in: 300,
     });
+  }
+
+  if (pathname === '/api/admin/users' && method === 'GET') {
+    const keyword = (requestUrl.searchParams.get('keyword') ?? '').toLowerCase();
+    const status = requestUrl.searchParams.get('status');
+    const filtered = mockState.adminUsers.filter((user) => {
+      const matchesKeyword =
+        !keyword ||
+        user.phone.toLowerCase().includes(keyword) ||
+        user.display_name.toLowerCase().includes(keyword) ||
+        user.id.toLowerCase().includes(keyword);
+      const matchesStatus = !status || user.status === status;
+      return matchesKeyword && matchesStatus;
+    });
+    return jsonResponse({ code: 0, message: 'ok', data: filtered });
+  }
+
+  const adminUserStatusMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/status$/);
+  if (adminUserStatusMatch && method === 'POST') {
+    const id = decodeURIComponent(adminUserStatusMatch[1]);
+    const user = mockState.adminUsers.find((item) => item.id === id);
+    if (!user) return notFound('User not found');
+    const payload = (body ?? {}) as { status?: 'enabled' | 'disabled' };
+    user.status = payload.status === 'disabled' ? 'disabled' : 'enabled';
+    user.updated_at = new Date().toISOString();
+    return jsonResponse({ code: 0, message: 'ok', data: user });
+  }
+
+  const adminUserResetMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
+  if (adminUserResetMatch && method === 'POST') {
+    const id = decodeURIComponent(adminUserResetMatch[1]);
+    const user = mockState.adminUsers.find((item) => item.id === id);
+    if (!user) return notFound('User not found');
+    const payload = (body ?? {}) as { password?: string };
+    if (!payload.password || payload.password.length < 8) {
+      return jsonResponse({ code: 'PASSWORD_TOO_SHORT', message: 'Password is too short' }, { status: 400 });
+    }
+    user.updated_at = new Date().toISOString();
+    return jsonResponse({ code: 0, message: 'ok', data: user });
+  }
+
+  if (pathname === '/api/admin/permissions' && method === 'GET') {
+    const keys = [...new Set(mockState.adminRoles.flatMap((role) => role.permissions))];
+    return jsonResponse({
+      code: 0,
+      message: 'ok',
+      data: keys.map((key) => ({ key, label: key, description: key })),
+    });
+  }
+
+  const adminUserSyncStatusMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/sync-status$/);
+  if (adminUserSyncStatusMatch && (method === 'GET' || method === 'POST')) {
+    const id = decodeURIComponent(adminUserSyncStatusMatch[1]);
+    const user = mockState.adminUsers.find((item) => item.id === id);
+    if (!user) return notFound('User not found');
+    user.updated_at = new Date().toISOString();
+    return jsonResponse({
+      code: 0,
+      message: 'ok',
+      data: {
+        user_id: id,
+        status: 'synced',
+        external_identities: user.external_identities,
+      },
+    });
+  }
+
+  if (pathname === '/api/admin/roles') {
+    if (method === 'GET') {
+      return jsonResponse({ code: 0, message: 'ok', data: mockState.adminRoles });
+    }
+    if (method === 'POST') {
+      const payload = (body ?? {}) as { role_key?: string; role_name?: string; description?: string; permissions?: string[] };
+      if (mockState.adminRoles.some((role) => role.role_key === payload.role_key)) {
+        return jsonResponse({ code: 'CONFLICT', message: 'Role key exists' }, { status: 409 });
+      }
+      const now = new Date().toISOString();
+      const role: MockAdminRole = {
+        id: nextId('role'),
+        role_key: payload.role_key?.trim() || nextId('role-key'),
+        role_name: payload.role_name?.trim() || 'Role',
+        description: payload.description,
+        permissions: payload.permissions ?? [],
+        is_system: false,
+        created_at: now,
+        updated_at: now,
+      };
+      mockState.adminRoles = [role, ...mockState.adminRoles];
+      return jsonResponse({ code: 0, message: 'ok', data: role });
+    }
+  }
+
+  const adminRoleMatch = pathname.match(/^\/api\/admin\/roles\/([^/]+)$/);
+  if (adminRoleMatch && method === 'PATCH') {
+    const id = decodeURIComponent(adminRoleMatch[1]);
+    const role = mockState.adminRoles.find((item) => item.id === id);
+    if (!role) return notFound('Role not found');
+    if (role.is_system) {
+      return jsonResponse({ code: 'FORBIDDEN', message: 'System role is protected' }, { status: 403 });
+    }
+    const payload = (body ?? {}) as { role_name?: string; description?: string; permissions?: string[] };
+    role.role_name = payload.role_name?.trim() || role.role_name;
+    role.description = payload.description ?? role.description;
+    role.permissions = payload.permissions ?? role.permissions;
+    role.updated_at = new Date().toISOString();
+    for (const user of mockState.adminUsers) {
+      user.roles = user.roles.map((item) => (item.id === role.id ? role : item));
+    }
+    return jsonResponse({ code: 0, message: 'ok', data: role });
+  }
+
+  const adminRoleStatusMatch = pathname.match(/^\/api\/admin\/roles\/([^/]+)\/status$/);
+  if (adminRoleStatusMatch && method === 'POST') {
+    const id = decodeURIComponent(adminRoleStatusMatch[1]);
+    const role = mockState.adminRoles.find((item) => item.id === id);
+    if (!role) return notFound('Role not found');
+    role.updated_at = new Date().toISOString();
+    return jsonResponse({ code: 0, message: 'ok', data: role });
+  }
+
+  const adminRoleUserMatch = pathname.match(/^\/api\/admin\/roles\/([^/]+)\/users\/([^/]+)$/);
+  if (adminRoleUserMatch && (method === 'POST' || method === 'DELETE')) {
+    const roleId = decodeURIComponent(adminRoleUserMatch[1]);
+    const userId = decodeURIComponent(adminRoleUserMatch[2]);
+    const role = mockState.adminRoles.find((item) => item.id === roleId);
+    const user = mockState.adminUsers.find((item) => item.id === userId);
+    if (!role) return notFound('Role not found');
+    if (!user) return notFound('User not found');
+    if (method === 'POST' && !user.roles.some((item) => item.id === role.id)) {
+      user.roles = [role, ...user.roles];
+    }
+    if (method === 'DELETE') {
+      user.roles = user.roles.filter((item) => item.id !== role.id);
+    }
+    user.updated_at = new Date().toISOString();
+    return jsonResponse({ code: 0, message: 'ok', data: user });
   }
 
   if (pathname === '/api/agents' && method === 'GET') {
@@ -883,6 +1370,312 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
     return jsonResponse({ data: { isSubscriber: false, lastChecked: Date.now() } });
   }
 
+  if (pathname === '/api/git/ssh-credentials') {
+    if (method === 'GET') return jsonResponse({ code: 0, message: 'ok', data: mockState.sshCredentials });
+    if (method === 'POST') {
+      const payload = (body ?? {}) as { name?: string; private_key?: string; passphrase?: string };
+      const credential: MockSshCredential = {
+        id: nextId('ssh'),
+        name: payload.name?.trim() || 'SSH Credential',
+        public_key: 'ssh-ed25519 AAAA generated',
+        fingerprint: `SHA256:${Date.now()}`,
+        created_at: new Date().toISOString(),
+      };
+      mockState.sshCredentials = [credential, ...mockState.sshCredentials];
+      return jsonResponse({ code: 0, message: 'ok', data: credential });
+    }
+  }
+
+  if (pathname === '/api/git/ssh-credentials/generate' && method === 'POST') {
+    const payload = (body ?? {}) as { name?: string };
+    const credential: MockSshCredential = {
+      id: nextId('ssh'),
+      name: payload.name?.trim() || 'Generated SSH Credential',
+      public_key: 'ssh-ed25519 AAAA generated',
+      fingerprint: `SHA256:${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    mockState.sshCredentials = [credential, ...mockState.sshCredentials];
+    return jsonResponse({ code: 0, message: 'ok', data: { credential, public_key: credential.public_key } });
+  }
+
+  if (pathname === '/api/git/projects') {
+    if (method === 'GET') return jsonResponse({ code: 0, message: 'ok', data: mockState.gitProjects });
+    if (method === 'POST') {
+      const payload = (body ?? {}) as {
+        display_name?: string;
+        repo_ssh_url?: string;
+        default_branch?: string;
+        credential_id?: string;
+      };
+      const project: MockGitProject = {
+        id: nextId('git'),
+        display_name: payload.display_name?.trim() || 'Git Project',
+        repo_ssh_url: payload.repo_ssh_url?.trim() || 'git@example.com:repo.git',
+        default_branch: payload.default_branch?.trim() || 'main',
+        credential_id: payload.credential_id || 'ssh-demo',
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      mockState.gitProjects = [project, ...mockState.gitProjects];
+      return jsonResponse({ code: 0, message: 'ok', data: project });
+    }
+  }
+
+  const gitProjectActionMatch = pathname.match(/^\/api\/git\/projects\/([^/]+)\/(sync|archive)$/);
+  if (gitProjectActionMatch && method === 'POST') {
+    const id = decodeURIComponent(gitProjectActionMatch[1]);
+    const action = gitProjectActionMatch[2];
+    const project = mockState.gitProjects.find((item) => item.id === id);
+    if (!project) return notFound('Git project not found');
+    project.status = action === 'archive' ? 'archived' : 'active';
+    project.last_synced_at = action === 'sync' ? new Date().toISOString() : project.last_synced_at;
+    project.updated_at = new Date().toISOString();
+    return jsonResponse({ code: 0, message: 'ok', data: project });
+  }
+
+  const gitProjectMatch = pathname.match(/^\/api\/git\/projects\/([^/]+)$/);
+  if (gitProjectMatch) {
+    const id = decodeURIComponent(gitProjectMatch[1]);
+    const project = mockState.gitProjects.find((item) => item.id === id);
+    if (!project) return notFound('Git project not found');
+    if (method === 'PATCH') {
+      const payload = (body ?? {}) as Partial<Pick<MockGitProject, 'display_name' | 'repo_ssh_url' | 'default_branch' | 'credential_id'>>;
+      Object.assign(project, {
+        ...(payload.display_name ? { display_name: payload.display_name } : {}),
+        ...(payload.repo_ssh_url ? { repo_ssh_url: payload.repo_ssh_url } : {}),
+        ...(payload.default_branch ? { default_branch: payload.default_branch } : {}),
+        ...(payload.credential_id ? { credential_id: payload.credential_id } : {}),
+        updated_at: new Date().toISOString(),
+      });
+      return jsonResponse({ code: 0, message: 'ok', data: project });
+    }
+    if (method === 'DELETE') {
+      mockState.gitProjects = mockState.gitProjects.filter((item) => item.id !== id);
+      return jsonResponse({ code: 0, message: 'ok', data: null });
+    }
+  }
+
+  if (pathname === '/api/workspaces') {
+    if (method === 'GET') return jsonResponse({ code: 0, message: 'ok', data: mockState.workspaces });
+    if (method === 'POST') {
+      const payload = (body ?? {}) as { name?: string; source_type?: 'blank' | 'git_project'; git_project_id?: string; branch_ref?: string };
+      const project = mockState.gitProjects.find((item) => item.id === payload.git_project_id) ?? mockState.gitProjects[0];
+      const branchRef = payload.branch_ref || project?.default_branch || 'main';
+      const sourceType = payload.source_type ?? 'blank';
+      const workspaceId = nextId('ws');
+      const workspace: MockWorkspaceResource = {
+        id: workspaceId,
+        name: payload.name?.trim() || 'Workspace',
+        status: 'active',
+        source_type: sourceType,
+        display_path: sourceType === 'git_project' ? `${project?.display_name || 'workspace'}/${branchRef}` : undefined,
+        git_project_id: sourceType === 'git_project' ? project?.id || 'git-demo' : null,
+        branch_ref: sourceType === 'git_project' ? branchRef : null,
+        root_rel_path: `workspaces/${workspaceId}/repo`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      mockState.workspaces = [workspace, ...mockState.workspaces];
+      return jsonResponse({ code: 0, message: 'ok', data: workspace });
+    }
+  }
+
+  const workspaceActionMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/(archive|restore)$/);
+  if (workspaceActionMatch && method === 'POST') {
+    const id = decodeURIComponent(workspaceActionMatch[1]);
+    const action = workspaceActionMatch[2];
+    const workspace = mockState.workspaces.find((item) => item.id === id);
+    if (!workspace) return notFound('Workspace not found');
+    workspace.status = action === 'archive' ? 'archived' : 'active';
+    workspace.updated_at = new Date().toISOString();
+    return jsonResponse({ code: 0, message: 'ok', data: workspace });
+  }
+
+  const workspaceResourceMatch = pathname.match(/^\/api\/workspaces\/([^/]+)$/);
+  if (workspaceResourceMatch) {
+    const id = decodeURIComponent(workspaceResourceMatch[1]);
+    const workspace = mockState.workspaces.find((item) => item.id === id);
+    if (!workspace) return notFound('Workspace not found');
+    if (method === 'GET') return jsonResponse({ code: 0, message: 'ok', data: workspace });
+    if (method === 'PATCH') {
+      const payload = (body ?? {}) as { name?: string };
+      workspace.name = payload.name?.trim() || workspace.name;
+      workspace.updated_at = new Date().toISOString();
+      return jsonResponse({ code: 0, message: 'ok', data: workspace });
+    }
+    if (method === 'DELETE') {
+      mockState.workspaces = mockState.workspaces.filter((item) => item.id !== id);
+      return jsonResponse({ code: 0, message: 'ok', data: null });
+    }
+  }
+
+  const workspaceFileOperationMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/files\/(list|read|write|mkdir|rename|delete|upload)$/);
+  if (workspaceFileOperationMatch && method === 'POST') {
+    const workspaceId = decodeURIComponent(workspaceFileOperationMatch[1]);
+    const operation = workspaceFileOperationMatch[2];
+    if (!mockState.workspaces.some((item) => item.id === workspaceId)) return notFound('Workspace not found');
+    const files = (mockState.workspaceFiles[workspaceId] ??= {});
+
+    if (operation === 'list') {
+      const payload = (body ?? {}) as { relative_path?: string };
+      const items = listWorkspaceFiles(workspaceId, payload.relative_path ?? '.');
+      return jsonResponse({ code: 0, message: 'ok', data: items });
+    }
+
+    if (operation === 'read') {
+      const payload = (body ?? {}) as { relative_path?: string };
+      const relPath = sanitizeRelativePath(payload.relative_path);
+      const file = files[relPath];
+      if (!file) return notFound('File not found');
+      return jsonResponse({
+        code: 0,
+        message: 'ok',
+        data: {
+          relative_path: file.path,
+          content: file.content,
+          version: `v${file.version}`,
+          size: file.content.length,
+        },
+      });
+    }
+
+    if (operation === 'write') {
+      const payload = (body ?? {}) as { relative_path?: string; content?: string; base_version?: string };
+      const relPath = sanitizeRelativePath(payload.relative_path);
+      const existing = files[relPath];
+      if (existing && payload.base_version && payload.base_version !== `v${existing.version}`) {
+        return jsonResponse(
+          { code: 'VERSION_CONFLICT', message: 'stale version', data: { current_version: `v${existing.version}` } },
+          { status: 409 }
+        );
+      }
+      const version = (existing?.version ?? 0) + 1;
+      files[relPath] = {
+        path: relPath,
+        content: payload.content ?? '',
+        version,
+        modified_at: new Date().toISOString(),
+      };
+      return jsonResponse({ code: 0, message: 'ok', data: { relative_path: relPath, version: `v${version}` } });
+    }
+
+    if (operation === 'mkdir') {
+      const payload = (body ?? {}) as { relative_path?: string };
+      const relPath = sanitizeRelativePath(payload.relative_path);
+      return jsonResponse({ code: 0, message: 'ok', data: { relative_path: relPath } });
+    }
+
+    if (operation === 'rename') {
+      const payload = (body ?? {}) as { relative_path?: string; new_relative_path?: string };
+      const from = sanitizeRelativePath(payload.relative_path);
+      const to = sanitizeRelativePath(payload.new_relative_path);
+      if (files[from]) {
+        files[to] = { ...files[from], path: to, version: files[from].version + 1, modified_at: new Date().toISOString() };
+        delete files[from];
+      }
+      return jsonResponse({ code: 0, message: 'ok', data: { relative_path: to, version: files[to] ? `v${files[to].version}` : undefined } });
+    }
+
+    if (operation === 'delete') {
+      const payload = (body ?? {}) as { relative_path?: string };
+      const relPath = sanitizeRelativePath(payload.relative_path);
+      for (const key of Object.keys(files)) {
+        if (key === relPath || key.startsWith(`${relPath}/`)) {
+          delete files[key];
+        }
+      }
+      return jsonResponse({ code: 0, message: 'ok', data: null });
+    }
+
+    if (operation === 'upload') {
+      const payload = (body ?? {}) as { relative_path?: string; file_name?: string; content_base64?: string; mime_type?: string };
+      const relPath = joinRelativePath(payload.relative_path ?? '.', payload.file_name ?? 'upload.txt');
+      const content =
+        payload.content_base64 && typeof atob === 'function' ? atob(payload.content_base64) : (payload.content_base64 ?? '');
+      files[relPath] = {
+        path: relPath,
+        content,
+        version: 1,
+        modified_at: new Date().toISOString(),
+      };
+      return jsonResponse({
+        code: 0,
+        message: 'ok',
+        data: { name: relPath.split('/').pop() ?? relPath, relative_path: relPath, kind: 'file', version: 'v1', size: content.length },
+      });
+    }
+  }
+
+  const workspaceTerminalsMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/terminals$/);
+  if (workspaceTerminalsMatch && method === 'POST') {
+    const workspaceId = decodeURIComponent(workspaceTerminalsMatch[1]);
+    const payload = (body ?? {}) as { relative_path?: string; shell?: string };
+    const session: MockTerminalSession = {
+      id: nextId('term'),
+      workspace_id: workspaceId,
+      cwd: sanitizeRelativePath(payload.relative_path),
+      status: 'running',
+      created_at: new Date().toISOString(),
+    };
+    mockState.terminalSessions[workspaceId] = [session, ...(mockState.terminalSessions[workspaceId] ?? [])];
+    return jsonResponse({ code: 0, message: 'ok', data: session });
+  }
+
+  const workspaceExecutionsMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/executions$/);
+  if (workspaceExecutionsMatch) {
+    const workspaceId = decodeURIComponent(workspaceExecutionsMatch[1]);
+    if (method === 'GET') {
+      const items = mockState.executions[workspaceId] ?? [];
+      return jsonResponse({ code: 0, message: 'ok', data: items });
+    }
+    if (method === 'POST') {
+      const execution = createWorkspaceExecution(
+        workspaceId,
+        (body ?? {}) as {
+          execution_type?: 'test_run' | 'preview_env';
+          kind?: 'test_run' | 'preview_env';
+          relative_path?: string;
+          command?: string;
+          title?: string;
+        }
+      );
+      return jsonResponse({ code: 0, message: 'ok', data: execution });
+    }
+  }
+
+  const executionArtifactsMatch = pathname.match(/^\/api\/executions\/([^/]+)\/artifacts$/);
+  if (executionArtifactsMatch && method === 'GET') {
+    const executionId = decodeURIComponent(executionArtifactsMatch[1]);
+    const execution = Object.values(mockState.executions)
+      .flat()
+      .find((item) => item.id === executionId);
+    if (!execution) return notFound('Execution not found');
+    return jsonResponse({ code: 0, message: 'ok', data: execution.artifacts });
+  }
+
+  const executionActionMatch = pathname.match(/^\/api\/executions\/([^/]+)\/(cancel|status)$/);
+  if (executionActionMatch && method === 'POST') {
+    const executionId = decodeURIComponent(executionActionMatch[1]);
+    const action = executionActionMatch[2];
+    const execution = Object.values(mockState.executions)
+      .flat()
+      .find((item) => item.id === executionId);
+    if (!execution) return notFound('Execution not found');
+
+    execution.status = action === 'cancel' ? 'cancelled' : ((body as { status?: MockExecution['status'] } | undefined)?.status ?? execution.status);
+    execution.updated_at = new Date().toISOString();
+    broadcast('workspace.execution.event', {
+      type: 'status',
+      workspace_id: execution.workspace_id,
+      execution_id: execution.id,
+      status: execution.status,
+      approval_state: execution.approval_state,
+    });
+    return jsonResponse({ code: 0, message: 'ok', data: execution });
+  }
+
   if (pathname === '/api/conversations' && method === 'GET') {
     return jsonResponse(listConversations());
   }
@@ -890,11 +1683,15 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
   if (pathname === '/api/conversations' && method === 'POST') {
     const payload = (body ?? {}) as {
       name?: string;
+      workspace_id?: string;
       extra?: { workspace?: string; skills?: string[] };
       model?: { provider_id?: string; model?: string; use_model?: string };
     };
     const id = nextId('conv');
-    const workspace = payload.extra?.workspace ?? `/srv/aion/${id}`;
+    const workspaceResource = payload.workspace_id
+      ? mockState.workspaces.find((item) => item.id === payload.workspace_id)
+      : undefined;
+    const workspace = payload.workspace_id ? undefined : payload.extra?.workspace ?? `/srv/aion/${id}`;
     const conversation: MockConversation = {
       created_at: Date.now(),
       modified_at: Date.now(),
@@ -902,8 +1699,10 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
       name: payload.name?.trim() || 'New Conversation',
       type: 'remote',
       status: 'finished',
+      workspace_id: payload.workspace_id,
       extra: {
-        workspace,
+        ...(workspace ? { workspace } : {}),
+        ...(workspaceResource ? { display_path: workspaceResource.display_path } : {}),
         custom_workspace: true,
         skills: payload.extra?.skills ?? [],
       },
@@ -1086,6 +1885,10 @@ async function handleMockApi(input: RequestInfo | URL, init?: RequestInit): Prom
 
   if (pathname.startsWith('/api/') && method === 'PUT') {
     return emptyOk();
+  }
+
+  if (pathname === '/api/auth/user') {
+    return null;
   }
 
   if (pathname.startsWith('/api/')) {

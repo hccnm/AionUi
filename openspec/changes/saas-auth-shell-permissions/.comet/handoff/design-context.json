@@ -1,0 +1,14 @@
+{
+  "change": "saas-auth-shell-permissions",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "eb021d3076668eecca55a3fcf423b12297c83f6e843f72ac4c0ccfa9a79fd3ea",
+  "files": [
+    { "path": "openspec/changes/saas-auth-shell-permissions/proposal.md", "sha256": "26f2b16bc80519e10473b661decd7d7e17bd6f787014a8d3b525919d254e7950" },
+    { "path": "openspec/changes/saas-auth-shell-permissions/design.md", "sha256": "3c4006f5b2dfaff41b7c3ac333791f96157cd7a0402c7e935442be70a7cb9efd" },
+    { "path": "openspec/changes/saas-auth-shell-permissions/tasks.md", "sha256": "0db1fefe3be34370107ceb9c55a51a508ab49637cb32aa1cd79569d5b9723cc3" },
+    { "path": "openspec/changes/saas-auth-shell-permissions/specs/auth-session/spec.md", "sha256": "eb9a25da646e9d7cfa5fe25a70dea89cbdfe25713c2ab146ae20d39761d28f2a" }
+  ]
+}

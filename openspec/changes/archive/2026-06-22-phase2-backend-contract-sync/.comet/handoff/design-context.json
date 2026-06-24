@@ -1,0 +1,14 @@
+{
+  "change": "phase2-backend-contract-sync",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "4082ea5dd5b372d0e671f5cf9b81a36bbad35f009c6394aa82131da7c29c84bf",
+  "files": [
+    { "path": "openspec/changes/phase2-backend-contract-sync/proposal.md", "sha256": "83802c78b7626420040ab75e6cb4bafe4a55c3ab9322c32077dad32cd6dabe0c" },
+    { "path": "openspec/changes/phase2-backend-contract-sync/design.md", "sha256": "6ef8c8efaf564d3fd1ed5d6bb8b30616abbca7ff6e72b3b24064ad17477da2bc" },
+    { "path": "openspec/changes/phase2-backend-contract-sync/tasks.md", "sha256": "d75ae7a75dbc4e9452414713f8cd5424b54073c258865fb55ea5370f24614678" },
+    { "path": "openspec/changes/phase2-backend-contract-sync/specs/phase2-backend-contract/spec.md", "sha256": "cfe3e9b118e9dae34c65c9b13cb0dc23a56ef7394b47790733e918ed35dc9cb1" }
+  ]
+}

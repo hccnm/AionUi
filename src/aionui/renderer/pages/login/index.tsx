@@ -12,7 +12,7 @@ type MessageState = {
 };
 
 const REMEMBER_ME_KEY = 'rememberMe';
-const REMEMBERED_USERNAME_KEY = 'rememberedUsername';
+const REMEMBERED_PHONE_KEY = 'rememberedPhone';
 const REMEMBERED_PASSWORD_KEY = 'rememberedPassword';
 
 // Simple obfuscation for stored credentials (not cryptographically secure, but prevents plain text storage)
@@ -33,17 +33,16 @@ const deobfuscate = (text: string): string => {
 const LoginPage: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { status, login, setupPassword } = useAuth();
-  const isSetupMode = status === 'setup_required';
+  const { status, login } = useAuth();
 
-  const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [message, setMessage] = useState<MessageState | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const usernameRef = useRef<HTMLInputElement | null>(null);
+  const phoneRef = useRef<HTMLInputElement | null>(null);
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const messageTimer = useRef<number | undefined>(undefined);
 
@@ -66,30 +65,16 @@ const LoginPage: React.FC = () => {
   }, [i18n.language]);
 
   useEffect(() => {
-    if (isSetupMode) {
-      setUsername('');
-      setRememberMe(false);
-      localStorage.removeItem(REMEMBER_ME_KEY);
-      localStorage.removeItem(REMEMBERED_USERNAME_KEY);
-      localStorage.removeItem(REMEMBERED_PASSWORD_KEY);
-    }
-  }, [isSetupMode]);
-
-  useEffect(() => {
     const isRememberMe = localStorage.getItem(REMEMBER_ME_KEY) === 'true';
-    if (!isSetupMode && isRememberMe) {
-      const storedUsername = localStorage.getItem(REMEMBERED_USERNAME_KEY);
+    if (isRememberMe) {
+      const storedPhone = localStorage.getItem(REMEMBERED_PHONE_KEY);
       const storedPassword = localStorage.getItem(REMEMBERED_PASSWORD_KEY);
-      if (storedUsername) setUsername(deobfuscate(storedUsername));
+      if (storedPhone) setPhone(deobfuscate(storedPhone));
       if (storedPassword) setPassword(deobfuscate(storedPassword));
       setRememberMe(true);
     }
     window.setTimeout(() => {
-      if (isSetupMode) {
-        passwordRef.current?.focus();
-      } else {
-        usernameRef.current?.focus();
-      }
+      phoneRef.current?.focus();
     }, 0);
 
     return () => {
@@ -97,7 +82,7 @@ const LoginPage: React.FC = () => {
         window.clearTimeout(messageTimer.current);
       }
     };
-  }, [isSetupMode]);
+  }, []);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -127,9 +112,9 @@ const LoginPage: React.FC = () => {
   const handleSubmit = useCallback(
     async (event: React.FormEvent) => {
       event.preventDefault();
-      const trimmedUsername = username.trim();
+      const trimmedPhone = phone.trim();
 
-      if ((!isSetupMode && !trimmedUsername) || !password) {
+      if (!trimmedPhone || !password) {
         showMessage({ type: 'error', text: t('login.errors.empty') });
         return;
       }
@@ -137,36 +122,16 @@ const LoginPage: React.FC = () => {
       setLoading(true);
       setMessage(null);
 
-      if (isSetupMode) {
-        const result = await setupPassword(password);
-
-        if (result.success) {
-          setPassword('');
-          showMessage({
-            type: 'success',
-            text: result.message ?? '密码已设置，请使用管理员账号登录。',
-          });
-        } else {
-          showMessage({
-            type: 'error',
-            text: result.message ?? t('login.errors.unknown'),
-          });
-        }
-
-        setLoading(false);
-        return;
-      }
-
-      const result = await login({ username: trimmedUsername, password, remember: rememberMe });
+      const result = await login({ phone: trimmedPhone, password, remember: rememberMe });
 
       if (result.success) {
         if (rememberMe) {
           localStorage.setItem(REMEMBER_ME_KEY, 'true');
-          localStorage.setItem(REMEMBERED_USERNAME_KEY, obfuscate(trimmedUsername));
+          localStorage.setItem(REMEMBERED_PHONE_KEY, obfuscate(trimmedPhone));
           localStorage.setItem(REMEMBERED_PASSWORD_KEY, obfuscate(password));
         } else {
           localStorage.removeItem(REMEMBER_ME_KEY);
-          localStorage.removeItem(REMEMBERED_USERNAME_KEY);
+          localStorage.removeItem(REMEMBERED_PHONE_KEY);
           localStorage.removeItem(REMEMBERED_PASSWORD_KEY);
         }
 
@@ -198,7 +163,7 @@ const LoginPage: React.FC = () => {
 
       setLoading(false);
     },
-    [isSetupMode, login, navigate, password, rememberMe, setupPassword, showMessage, t, username]
+    [login, navigate, password, phone, rememberMe, showMessage, t]
   );
 
   if (status === 'checking') {
@@ -219,47 +184,43 @@ const LoginPage: React.FC = () => {
             <img src={loginLogo} alt={t('login.brand')} />
           </div>
           <h1 className='login-page__title'>{t('login.brand')}</h1>
-          <p className='login-page__subtitle'>
-            {isSetupMode ? '首次部署初始化，请先设置管理员密码。' : t('login.subtitle')}
-          </p>
+          <p className='login-page__subtitle'>{t('login.subtitle')}</p>
         </div>
 
         <form className='login-page__form' onSubmit={handleSubmit}>
-          {!isSetupMode && (
-            <div className='login-page__form-item'>
-              <label className='login-page__label' htmlFor='username'>
-                {t('login.username')}
-              </label>
-              <div className='login-page__input-wrapper'>
-                <svg
-                  className='login-page__input-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  strokeWidth='2'
-                  aria-hidden='true'
-                >
-                  <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                  <circle cx='12' cy='7' r='4' />
-                </svg>
-                <input
-                  ref={usernameRef}
-                  id='username'
-                  name='username'
-                  className='login-page__input'
-                  placeholder={t('login.usernamePlaceholder')}
-                  autoComplete='username'
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  aria-required='true'
-                />
-              </div>
+          <div className='login-page__form-item'>
+            <label className='login-page__label' htmlFor='phone'>
+              {t('login.username')}
+            </label>
+            <div className='login-page__input-wrapper'>
+              <svg
+                className='login-page__input-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                strokeWidth='2'
+                aria-hidden='true'
+              >
+                <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
+                <circle cx='12' cy='7' r='4' />
+              </svg>
+              <input
+                ref={phoneRef}
+                id='phone'
+                name='phone'
+                className='login-page__input'
+                placeholder={t('login.usernamePlaceholder')}
+                autoComplete='tel'
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                aria-required='true'
+              />
             </div>
-          )}
+          </div>
 
           <div className='login-page__form-item'>
             <label className='login-page__label' htmlFor='password'>
-              {isSetupMode ? '管理员密码' : t('login.password')}
+              {t('login.password')}
             </label>
             <div className='login-page__input-wrapper'>
               <svg
@@ -279,8 +240,8 @@ const LoginPage: React.FC = () => {
                 name='password'
                 type={passwordVisible ? 'text' : 'password'}
                 className='login-page__input'
-                placeholder={isSetupMode ? '请输入管理员初始密码（至少 8 位）' : t('login.passwordPlaceholder')}
-                autoComplete={isSetupMode ? 'new-password' : 'current-password'}
+                placeholder={t('login.passwordPlaceholder')}
+                autoComplete='current-password'
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 aria-required='true'
@@ -308,17 +269,15 @@ const LoginPage: React.FC = () => {
             </div>
           </div>
 
-          {!isSetupMode && (
-            <div className='login-page__checkbox'>
-              <input
-                type='checkbox'
-                id='remember-me'
-                checked={rememberMe}
-                onChange={(event) => setRememberMe(event.target.checked)}
-              />
-              <label htmlFor='remember-me'>{t('login.rememberMe')}</label>
-            </div>
-          )}
+          <div className='login-page__checkbox'>
+            <input
+              type='checkbox'
+              id='remember-me'
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
+            />
+            <label htmlFor='remember-me'>{t('login.rememberMe')}</label>
+          </div>
 
           <button type='submit' className='login-page__submit' disabled={loading}>
             {loading && (
@@ -336,7 +295,7 @@ const LoginPage: React.FC = () => {
                 />
               </svg>
             )}
-            <span>{loading ? t('login.submitting') : isSetupMode ? '设置密码' : t('login.submit')}</span>
+            <span>{loading ? t('login.submitting') : t('login.submit')}</span>
           </button>
 
           <div

@@ -1,0 +1,14 @@
+{
+  "change": "admin-user-role-management",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "b8faade1e7ca9d13025ae5812d3cd2c927e34e64b2adceaca1dc59d9ed7c5b8f",
+  "files": [
+    { "path": "openspec/changes/admin-user-role-management/proposal.md", "sha256": "43e9d5b6d13e0a6f87e8c520a99c7ba50521b966dd6a4740c382288217b35b2c" },
+    { "path": "openspec/changes/admin-user-role-management/design.md", "sha256": "d7af2d3ee53257966248c510239fe592d1f8af03ab08dd74788c92d9750190df" },
+    { "path": "openspec/changes/admin-user-role-management/tasks.md", "sha256": "64e5f03ae9e8487074357add5a2e4ecc68285d08141280825338529e9092917b" },
+    { "path": "openspec/changes/admin-user-role-management/specs/admin-access-control/spec.md", "sha256": "1ec2a1d4bf03e4183a0b9106bc6a19cebeace31f41d11fdfa1d63ff1b6f8a6a0" }
+  ]
+}

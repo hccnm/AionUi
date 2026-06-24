@@ -4,6 +4,9 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { SettingsViewModeProvider } from '@/renderer/components/settings/SettingsModal/settingsViewContext';
 import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
+import { canViewAdminRoles, canViewAdminUsers } from '@/common/admin/adminAccessControl';
+import type { Phase2CurrentUser } from '@/common/auth/phase2';
+import { useAuth } from '@/renderer/hooks/context/AuthContext';
 import { useExtensionSettingsTabs } from '@/renderer/hooks/system/useExtensionSettingsTabs';
 import {
   Cat,
@@ -33,7 +36,7 @@ type NavItem = { label: string; icon: React.ReactElement; path: string; id: stri
 
 type TranslateFn = (key: string, options?: { defaultValue?: string }) => string;
 
-export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): NavItem[] {
+export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn, currentUser: Phase2CurrentUser | null): NavItem[] {
   const builtinMap: Record<string, NavItem> = {
     model: { id: 'model', label: t('settings.model'), icon: <LinkCloud theme='outline' size='16' />, path: 'model' },
     assistants: {
@@ -54,6 +57,24 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
       icon: <Lightning theme='outline' size='16' />,
       path: 'capabilities',
     },
+    resources: {
+      id: 'resources',
+      label: t('settings.resources', { defaultValue: 'Resources' }),
+      icon: <Puzzle theme='outline' size='16' />,
+      path: 'resources',
+    },
+    'admin-users': {
+      id: 'admin-users',
+      label: t('settings.adminUsers', { defaultValue: 'Admin Users' }),
+      icon: <System theme='outline' size='16' />,
+      path: 'admin/users',
+    },
+    'admin-roles': {
+      id: 'admin-roles',
+      label: t('settings.adminRoles', { defaultValue: 'Admin Roles' }),
+      icon: <System theme='outline' size='16' />,
+      path: 'admin/roles',
+    },
     display: {
       id: 'display',
       label: t('settings.display'),
@@ -71,7 +92,12 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
     about: { id: 'about', label: t('settings.about'), icon: <Info theme='outline' size='16' />, path: 'about' },
   };
 
-  return BUILTIN_TAB_IDS.filter((id) => (isDesktop ? true : id !== 'pet')).map((id) => builtinMap[id]);
+  return BUILTIN_TAB_IDS.filter((id) => {
+    if (!isDesktop && id === 'pet') return false;
+    if (id === 'admin-users') return canViewAdminUsers(currentUser);
+    if (id === 'admin-roles') return canViewAdminRoles(currentUser);
+    return true;
+  }).map((id) => builtinMap[id]);
 }
 
 const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, className, contentClassName }) => {
@@ -81,13 +107,14 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
   const { pathname } = useLocation();
   const { t } = useTranslation();
   const isDesktop = isElectronDesktop();
+  const { currentUser } = useAuth();
 
   const extensionTabs = useExtensionSettingsTabs();
 
   const { resolveExtTabName } = useExtI18n();
 
   const menuItems = React.useMemo(() => {
-    const builtins = getBuiltinSettingsNavItems(isDesktop, t);
+    const builtins = getBuiltinSettingsNavItems(isDesktop, t, currentUser);
 
     // Insert extension tabs before system (unanchored default) or at anchor position
     const result = [...builtins];
@@ -144,7 +171,7 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
     }
 
     return result;
-  }, [isDesktop, t, extensionTabs, resolveExtTabName]);
+  }, [isDesktop, t, currentUser, extensionTabs, resolveExtTabName]);
 
   const containerClass = classNames(
     'settings-page-wrapper w-full min-h-full box-border overflow-y-auto',

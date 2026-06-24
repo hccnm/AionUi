@@ -57,7 +57,8 @@ describe('httpClient', () => {
     const store = createAuthSessionStore(createMemoryStorage());
     store.setSession({
       token: 'token-old',
-      user: { id: 'user-1', username: 'admin' },
+      currentUser: null,
+      loginMode: 'password',
     });
     const fetchSpy = vi
       .fn()
@@ -137,6 +138,36 @@ describe('httpClient', () => {
     expect(fetchSpy).toHaveBeenCalledWith('https://api.example.com/api/auth/status', {
       method: 'GET',
       headers: {},
+      body: undefined,
+      signal: undefined,
+    });
+  });
+
+  it('does not refresh gateway sessions on 401', async () => {
+    const store = createAuthSessionStore(createMemoryStorage());
+    store.setSession({ token: 'legacy-token', currentUser: null, loginMode: 'gateway' });
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: 'UNAUTHENTICATED', message: 'expired' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(
+      request('/api/conversations', {
+        method: 'GET',
+        backendBaseUrl: 'https://api.example.com',
+        sessionStore: store,
+      })
+    ).rejects.toMatchObject({ status: 401 });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith('https://api.example.com/api/conversations', {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer legacy-token',
+      },
       body: undefined,
       signal: undefined,
     });

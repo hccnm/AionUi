@@ -139,6 +139,7 @@ export const conversation = {
         type: p.type,
         id: p.id,
         name: p.name,
+        workspace_id: p.workspace_id,
         extra: p.extra,
       };
       if (isAionrs) {
@@ -156,6 +157,13 @@ export const conversation = {
         model?: TProviderWithModel;
       };
       const clonedConversation: Record<string, unknown> = { ...rest };
+      if (typeof clonedConversation.workspace_id === 'string' && clonedConversation.workspace_id) {
+        const extra = clonedConversation.extra;
+        if (extra && typeof extra === 'object') {
+          const { workspace: _workspace, ...safeExtra } = extra as Record<string, unknown>;
+          clonedConversation.extra = safeExtra;
+        }
+      }
       if (isAionrs) {
         const model = toApiModelOptional(_rawModel);
         if (model) clonedConversation.model = model;
@@ -1340,6 +1348,7 @@ export interface ICreateConversationParams {
   type: 'acp' | 'codex' | 'openclaw-gateway' | 'nanobot' | 'remote' | 'aionrs';
   id?: string;
   name?: string;
+  workspace_id?: string;
   model: TProviderWithModel;
   extra: {
     workspace?: string;

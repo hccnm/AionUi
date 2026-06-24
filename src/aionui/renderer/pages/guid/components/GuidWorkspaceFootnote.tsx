@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { WorkspaceResource } from '@/common/resources/workspaceResources';
 import { addRecentWorkspace, getRecentWorkspaces } from '@/renderer/components/workspace';
 import { Tooltip } from '@arco-design/web-react';
 import { Close, Down } from '@icon-park/react';
@@ -15,7 +16,10 @@ import styles from '../index.module.css';
 
 type GuidWorkspaceFootnoteProps = {
   workspaceDir: string;
+  workspaceResources?: WorkspaceResource[];
+  selectedWorkspaceId?: string;
   onSelectWorkspace: (dir: string) => void;
+  onSelectWorkspaceResource?: (workspace: WorkspaceResource) => void;
   onClearWorkspace: () => void;
 };
 
@@ -49,7 +53,10 @@ const PlusIcon = () => (
 
 const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
   workspaceDir,
+  workspaceResources = [],
+  selectedWorkspaceId,
   onSelectWorkspace,
+  onSelectWorkspaceResource,
   onClearWorkspace,
 }) => {
   const { t } = useTranslation();
@@ -137,6 +144,12 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
       name.toLowerCase().includes(searchQuery.toLowerCase()) || p.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
+  const hasWorkspaceResources = workspaceResources.length > 0;
+  const filteredWorkspaceResources = workspaceResources.filter((workspace) => {
+    if (!searchQuery) return true;
+    const haystack = `${workspace.name} ${workspace.source_type} ${workspace.branch_ref ?? ''}`.toLowerCase();
+    return haystack.includes(searchQuery.toLowerCase());
+  });
 
   const workspaceName = workspaceDir ? workspaceDir.split(/[\\/]/).pop() || workspaceDir : '';
 
@@ -165,40 +178,83 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
             />
           </div>
 
-          {filteredRecent.map((path) => {
-            const name = path.split(/[\\/]/).pop() || path;
-            const isActive = path === workspaceDir;
-            return (
-              <div
-                key={path}
-                className={`${styles.wsDropdownItem} ${isActive ? styles.wsDropdownItemActive : ''}`}
-                onClick={() => handleSelectPath(path)}
-              >
-                <FolderIcon size={13} />
-                <span className={styles.wsDropdownItemName}>{name}</span>
-                {isActive && (
-                  <svg
-                    width='12'
-                    height='12'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth='2.5'
-                    viewBox='0 0 24 24'
-                    style={{ marginLeft: 'auto', flexShrink: 0 }}
-                  >
-                    <path d='M20 6L9 17l-5-5' />
-                  </svg>
-                )}
-              </div>
-            );
-          })}
+          {hasWorkspaceResources &&
+            filteredWorkspaceResources.map((workspace) => {
+              const isActive = workspace.id === selectedWorkspaceId;
+              const isArchived = workspace.status === 'archived';
+              return (
+                <div
+                  key={workspace.id}
+                  className={`${styles.wsDropdownItem} ${isActive ? styles.wsDropdownItemActive : ''}`}
+                  onClick={() => {
+                    if (isArchived) return;
+                    onSelectWorkspaceResource?.(workspace);
+                    setOpen(false);
+                    setSearchQuery('');
+                  }}
+                >
+                  <FolderIcon size={13} />
+                  <span className={styles.wsDropdownItemName}>
+                    {workspace.name}
+                    {workspace.branch_ref && <span className='ml-6px text-11px text-t-tertiary'>{workspace.branch_ref}</span>}
+                    {isArchived && <span className='ml-6px text-11px text-warning-6'>archived</span>}
+                  </span>
+                  {isActive && (
+                    <svg
+                      width='12'
+                      height='12'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2.5'
+                      viewBox='0 0 24 24'
+                      style={{ marginLeft: 'auto', flexShrink: 0 }}
+                    >
+                      <path d='M20 6L9 17l-5-5' />
+                    </svg>
+                  )}
+                </div>
+              );
+            })}
 
-          {filteredRecent.length > 0 && <div className={styles.wsDropdownSep} />}
+          {!hasWorkspaceResources &&
+            filteredRecent.map((path) => {
+              const name = path.split(/[\\/]/).pop() || path;
+              const isActive = path === workspaceDir;
+              return (
+                <div
+                  key={path}
+                  className={`${styles.wsDropdownItem} ${isActive ? styles.wsDropdownItemActive : ''}`}
+                  onClick={() => handleSelectPath(path)}
+                >
+                  <FolderIcon size={13} />
+                  <span className={styles.wsDropdownItemName}>{name}</span>
+                  {isActive && (
+                    <svg
+                      width='12'
+                      height='12'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2.5'
+                      viewBox='0 0 24 24'
+                      style={{ marginLeft: 'auto', flexShrink: 0 }}
+                    >
+                      <path d='M20 6L9 17l-5-5' />
+                    </svg>
+                  )}
+                </div>
+              );
+            })}
 
-          <div className={`${styles.wsDropdownItem} ${styles.wsDropdownItemAccent}`} onClick={handleBrowseWorkspace}>
-            <PlusIcon />
-            <span>{t('team.create.chooseDifferentFolder')}</span>
-          </div>
+          {(hasWorkspaceResources ? filteredWorkspaceResources.length > 0 : filteredRecent.length > 0) && (
+            <div className={styles.wsDropdownSep} />
+          )}
+
+          {!hasWorkspaceResources && (
+            <div className={`${styles.wsDropdownItem} ${styles.wsDropdownItemAccent}`} onClick={handleBrowseWorkspace}>
+              <PlusIcon />
+              <span>{t('team.create.chooseDifferentFolder')}</span>
+            </div>
+          )}
 
           <>
             <div className={styles.wsDropdownSep} />
@@ -274,7 +330,7 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
           >
             <FolderIcon size={14} />
             <span>{t('guid.workspace.workInProject')}</span>
-            {recentWorkspaces.length > 0 && (
+            {(hasWorkspaceResources || recentWorkspaces.length > 0) && (
               <Down
                 theme='outline'
                 size='12'

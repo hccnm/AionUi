@@ -88,7 +88,7 @@ export async function refreshAccessToken(options: {
   const sessionStore = options.sessionStore ?? authSessionStore;
   const fetcher = options.fetchImpl ?? fetch;
   const currentToken = sessionStore.getToken();
-  if (!currentToken) return null;
+  if (!currentToken || sessionStore.getLoginMode() !== 'password') return null;
 
   const response = await fetcher(resolveRefreshUrl(options.input), {
     method: 'POST',

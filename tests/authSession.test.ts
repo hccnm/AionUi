@@ -48,4 +48,24 @@ describe('auth session store', () => {
     expect(store.getUser()).toBeNull();
     expect(store.getNeedsSetup()).toBe(false);
   });
+
+  it('persists phase2 current user and login mode', () => {
+    const storage = createMemoryStorage();
+    const store = createAuthSessionStore(storage);
+    const currentUser = {
+      id: 'usr_1',
+      phone: '13800138000',
+      username: 'zhangsan',
+      display_name: '张三',
+      roles: [{ id: 'role_admin', role_key: 'super_admin', role_name: '超级管理员', permissions: ['*'] }],
+      permission_flags: ['*'],
+      is_admin: true,
+    };
+
+    store.setSession({ token: 'token-1', currentUser, loginMode: 'password' });
+
+    expect(store.getToken()).toBe('token-1');
+    expect(store.getCurrentUser()).toEqual(currentUser);
+    expect(store.getLoginMode()).toBe('password');
+  });
 });

@@ -38,7 +38,8 @@ export const groupConversationsByWorkspace = (
   const withoutWorkspaceConvs: TChatConversation[] = [];
 
   conversations.forEach((conv) => {
-    const workspace = conv.extra?.workspace;
+    const extra = conv.extra as { workspace?: string; display_path?: string; custom_workspace?: boolean } | undefined;
+    const workspace = extra?.display_path || extra?.workspace;
     const custom_workspace = conv.extra?.custom_workspace;
 
     if (custom_workspace && workspace) {

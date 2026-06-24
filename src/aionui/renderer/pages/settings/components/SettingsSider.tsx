@@ -1,5 +1,7 @@
 import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
+import { canViewAdminRoles, canViewAdminUsers } from '@/common/admin/adminAccessControl';
+import { useAuth } from '@/renderer/hooks/context/AuthContext';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
 import { useExtensionSettingsTabs } from '@/renderer/hooks/system/useExtensionSettingsTabs';
 import {
@@ -28,6 +30,9 @@ export const BUILTIN_TAB_IDS = [
   'model',
   'assistants',
   'capabilities',
+  'resources',
+  'admin-users',
+  'admin-roles',
   'display',
   'pet',
   'system',
@@ -72,6 +77,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const isDesktop = isElectronDesktop();
+  const { currentUser } = useAuth();
 
   const extensionTabs = useExtensionSettingsTabs();
   const { resolveExtTabName } = useExtI18n();
@@ -98,6 +104,24 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         icon: <Lightning />,
         path: 'capabilities',
       },
+      resources: {
+        id: 'resources',
+        label: t('settings.resources', { defaultValue: 'Resources' }),
+        icon: <Puzzle />,
+        path: 'resources',
+      },
+      'admin-users': {
+        id: 'admin-users',
+        label: t('settings.adminUsers', { defaultValue: 'Admin Users' }),
+        icon: <System />,
+        path: 'admin/users',
+      },
+      'admin-roles': {
+        id: 'admin-roles',
+        label: t('settings.adminRoles', { defaultValue: 'Admin Roles' }),
+        icon: <System />,
+        path: 'admin/roles',
+      },
       display: { id: 'display', label: t('settings.display'), icon: <Computer />, path: 'display' },
       webui: {
         id: 'webui',
@@ -114,6 +138,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => {
       if (!isDesktop && id === 'pet') {
         return false;
+      }
+      if (id === 'admin-users') {
+        return canViewAdminUsers(currentUser);
+      }
+      if (id === 'admin-roles') {
+        return canViewAdminRoles(currentUser);
       }
       return true;
     }).map((id) => builtinMap[id]);
@@ -190,7 +220,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     }
 
     return { menus: result, groupHeaderAt: headerAt };
-  }, [t, isDesktop, extensionTabs, resolveExtTabName]);
+  }, [t, isDesktop, currentUser, extensionTabs, resolveExtTabName]);
 
   const siderTooltipProps = getSiderTooltipProps(tooltipEnabled);
   return (

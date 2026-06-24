@@ -1,12 +1,19 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  createPhase2AuthAdapter,
+  hasAnyPermission as phase2HasAnyPermission,
+  hasPermission as phase2HasPermission,
+  type Phase2CurrentUser,
+  type Phase2LoginMode,
+} from '@/common/auth/phase2';
 import { authSessionStore, type AuthUser } from '@/common/auth/session';
-import { AUTH_EXPIRED_EVENT, fetchWithSaasAuth } from '@/common/auth/http';
+import { AUTH_EXPIRED_EVENT } from '@/common/auth/http';
 
-type AuthStatus = 'checking' | 'setup_required' | 'authenticated' | 'unauthenticated';
+type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
 
 interface LoginParams {
-  username: string;
+  phone: string;
   password: string;
   remember?: boolean;
 }
@@ -32,106 +39,83 @@ interface ChangePasswordParams {
 interface AuthContextValue {
   ready: boolean;
   user: AuthUser | null;
+  currentUser: Phase2CurrentUser | null;
+  permissionFlags: string[];
+  derived: NonNullable<Phase2CurrentUser['derived']> | null;
   status: AuthStatus;
   login: (params: LoginParams) => Promise<LoginResult>;
-  setupPassword: (newPassword: string) => Promise<SetupPasswordResult>;
   changePassword: (params: ChangePasswordParams) => Promise<SetupPasswordResult>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   clearAuthCache: () => void;
+  hasPermission: (flag: string) => boolean;
+  hasAnyPermission: (flags: string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-type AuthStatusResponse = {
-  success: boolean;
-  needs_setup: boolean;
-  user_count: number;
-  is_authenticated: boolean;
-};
-
-type AuthUserResponse = {
-  success: boolean;
-  user?: AuthUser;
-};
-
-type LoginResponse = {
-  success: boolean;
-  message?: string;
-  token?: string;
-  user?: AuthUser;
-  error?: string;
-  code?: string;
-};
+const authAdapter = createPhase2AuthAdapter();
 
 function clearAuthCache(): void {
   authSessionStore.clearSession();
 }
 
-async function readJson<T>(response: Response): Promise<T | null> {
-  const contentType = response.headers.get('Content-Type');
-  if (!contentType?.includes('application/json')) return null;
-  return (await response.json()) as T;
+function toLegacyUser(user: Phase2CurrentUser): AuthUser {
+  return {
+    id: user.id,
+    username: user.display_name || user.username || user.phone || user.id,
+  };
 }
 
-async function fetchAuthStatus(signal?: AbortSignal): Promise<AuthStatusResponse | null> {
-  try {
-    const response = await fetchWithSaasAuth(
-      '/api/auth/status',
-      {
-        method: 'GET',
-        headers: {},
-        signal,
-      },
-      {
-        auth: 'none',
-        retryOn401: false,
-      }
-    );
-    if (!response.ok) return null;
-    return readJson<AuthStatusResponse>(response);
-  } catch (error) {
-    if ((error as Error).name === 'AbortError') return null;
-    console.error('Failed to fetch auth status:', error);
-    return null;
-  }
+function inferLoginMode(currentUser: Phase2CurrentUser | null): Phase2LoginMode | null {
+  return currentUser?.login_mode ?? authSessionStore.getLoginMode();
 }
 
-async function fetchCurrentUser(signal?: AbortSignal): Promise<AuthUser | null> {
-  try {
-    const response = await fetchWithSaasAuth(
-      '/api/auth/user',
-      {
-        method: 'GET',
-        headers: {},
-        signal,
-      },
-      {
-        auth: 'required',
-      }
-    );
+function getGatewayLogoutUrl(): string | null {
+  const value = import.meta.env.VITE_AIONUI_GATEWAY_LOGOUT_URL;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
 
-    if (!response.ok) return null;
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
 
-    const data = await readJson<AuthUserResponse>(response);
-    if (data?.success && data.user) {
-      return data.user;
-    }
-  } catch (error) {
-    if ((error as Error).name === 'AbortError') {
-      return null;
-    }
-    console.error('Failed to fetch current user:', error);
-  }
-
-  return null;
+function mapLoginError(error: unknown): LoginResult {
+  const message = error instanceof Error ? error.message : 'Login failed';
+  return {
+    success: false,
+    message,
+    code: message.toLowerCase().includes('credential') ? 'invalidCredentials' : 'unknown',
+  };
 }
 
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<Phase2CurrentUser | null>(authSessionStore.getCurrentUser());
   const [user, setUser] = useState<AuthUser | null>(authSessionStore.getUser());
   const [status, setStatus] = useState<AuthStatus>('checking');
   const [ready, setReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  const applyAuthenticatedUser = useCallback((nextCurrentUser: Phase2CurrentUser, token: string | null) => {
+    const loginMode = nextCurrentUser.login_mode ?? (token ? 'password' : 'gateway');
+    authSessionStore.setNeedsSetup(false);
+    authSessionStore.setSession({
+      token,
+      currentUser: nextCurrentUser,
+      loginMode,
+    });
+    setCurrentUser(nextCurrentUser);
+    setUser(toLegacyUser(nextCurrentUser));
+    setStatus('authenticated');
+    setReady(true);
+  }, []);
+
+  const applyUnauthenticated = useCallback(() => {
+    authSessionStore.clearSession();
+    setCurrentUser(null);
+    setUser(null);
+    setStatus('unauthenticated');
+    setReady(true);
+  }, []);
 
   const refresh = useCallback(async () => {
     abortRef.current?.abort();
@@ -139,48 +123,14 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     abortRef.current = controller;
     setStatus('checking');
 
-    const authStatus = await fetchAuthStatus(controller.signal);
-    if (!authStatus) {
-      setUser(authSessionStore.getUser());
-      setStatus(authSessionStore.getNeedsSetup() ? 'setup_required' : 'unauthenticated');
-      setReady(true);
-      return;
+    try {
+      const nextCurrentUser = await authAdapter.getMe(controller.signal);
+      applyAuthenticatedUser(nextCurrentUser, authSessionStore.getToken());
+    } catch (error) {
+      if (isAbortError(error)) return;
+      applyUnauthenticated();
     }
-
-    if (authStatus.needs_setup) {
-      authSessionStore.clearSession();
-      authSessionStore.setNeedsSetup(true);
-      setUser(null);
-      setStatus('setup_required');
-      setReady(true);
-      return;
-    }
-
-    authSessionStore.setNeedsSetup(false);
-
-    const token = authSessionStore.getToken();
-    if (!token) {
-      setUser(null);
-      setStatus('unauthenticated');
-      setReady(true);
-      return;
-    }
-
-    const currentUser = await fetchCurrentUser(controller.signal);
-    if (currentUser) {
-      authSessionStore.setSession({
-        token,
-        user: currentUser,
-      });
-      setUser(currentUser);
-      setStatus('authenticated');
-    } else {
-      authSessionStore.clearSession();
-      setUser(null);
-      setStatus('unauthenticated');
-    }
-    setReady(true);
-  }, []);
+  }, [applyAuthenticatedUser, applyUnauthenticated]);
 
   useEffect(() => {
     void refresh();
@@ -192,190 +142,105 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   useEffect(() => {
     const handleAuthExpired = () => {
       abortRef.current?.abort();
-      setUser(null);
-      setStatus(authSessionStore.getNeedsSetup() ? 'setup_required' : 'unauthenticated');
-      setReady(true);
+      applyUnauthenticated();
     };
 
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     return () => {
       window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     };
-  }, []);
+  }, [applyUnauthenticated]);
 
-  const login = useCallback(async ({ username, password }: LoginParams): Promise<LoginResult> => {
-    try {
-      const response = await fetchWithSaasAuth(
-        '/login',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ username, password }),
-        },
-        {
-          auth: 'none',
-          retryOn401: false,
+  const login = useCallback(
+    async ({ phone, password }: LoginParams): Promise<LoginResult> => {
+      try {
+        const loginResponse = await authAdapter.login(phone, password);
+        const nextCurrentUser = await authAdapter.getMe();
+        applyAuthenticatedUser(nextCurrentUser, loginResponse.token);
+
+        const win = window as Window & { __websocketReconnect?: () => void };
+        if (typeof window !== 'undefined' && win.__websocketReconnect) {
+          win.__websocketReconnect();
         }
-      );
-      const data = (await readJson<LoginResponse>(response)) ?? { success: false };
 
-      if (!response.ok || !data.success || !data.user || !data.token) {
-        let code: LoginErrorCode = 'unknown';
-        if (response.status === 401) {
-          code = 'invalidCredentials';
-        } else if (response.status === 429) {
-          code = 'tooManyAttempts';
-        } else if (response.status >= 500) {
-          code = 'serverError';
-        }
-        return {
-          success: false,
-          message: data.error ?? data.message ?? 'Login failed',
-          code,
-        };
+        return { success: true };
+      } catch (error) {
+        console.error('Login request failed:', error);
+        return mapLoginError(error);
       }
-
-      authSessionStore.setNeedsSetup(false);
-      authSessionStore.setSession({
-        token: data.token,
-        user: data.user,
-      });
-      setUser(data.user);
-      setStatus('authenticated');
-      setReady(true);
-
-      const win = window as Window & { __websocketReconnect?: () => void };
-      if (typeof window !== 'undefined' && win.__websocketReconnect) {
-        win.__websocketReconnect();
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error('Login request failed:', error);
-      return {
-        success: false,
-        message: 'Network error. Please try again.',
-        code: 'networkError',
-      };
-    }
-  }, []);
-
-  const setupPassword = useCallback(async (newPassword: string): Promise<SetupPasswordResult> => {
-    try {
-      const response = await fetchWithSaasAuth(
-        '/api/auth/setup-password',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ new_password: newPassword }),
-        },
-        {
-          auth: 'none',
-          retryOn401: false,
-        }
-      );
-
-      const data = await readJson<{ success?: boolean; error?: string; message?: string }>(response);
-      if (!response.ok) {
-        return {
-          success: false,
-          message: data?.error ?? data?.message ?? 'Failed to set password',
-        };
-      }
-
-      authSessionStore.setNeedsSetup(false);
-      setStatus('unauthenticated');
-      setReady(true);
-      return {
-        success: true,
-        message: data?.message,
-      };
-    } catch (error) {
-      console.error('Setup password request failed:', error);
-      return {
-        success: false,
-        message: 'Network error. Please try again.',
-      };
-    }
-  }, []);
+    },
+    [applyAuthenticatedUser]
+  );
 
   const changePassword = useCallback(async ({ currentPassword, newPassword }: ChangePasswordParams) => {
     try {
-      const response = await fetchWithSaasAuth(
-        '/api/auth/change-password',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            current_password: currentPassword,
-            new_password: newPassword,
-          }),
-        },
-        {
-          auth: 'required',
-        }
-      );
-      const data = await readJson<{ success?: boolean; error?: string; message?: string }>(response);
-      if (!response.ok) {
-        return {
-          success: false,
-          message: data?.error ?? data?.message ?? 'Failed to change password',
-        };
-      }
+      await authAdapter.changePassword(currentPassword, newPassword);
       return {
         success: true,
-        message: data?.message,
       };
     } catch (error) {
       console.error('Change password request failed:', error);
       return {
         success: false,
-        message: 'Network error. Please try again.',
+        message: error instanceof Error ? error.message : 'Network error. Please try again.',
       };
     }
   }, []);
 
   const logout = useCallback(async () => {
+    const loginMode = inferLoginMode(currentUser);
+
     try {
-      await fetchWithSaasAuth(
-        '/logout',
-        {
-          method: 'POST',
-          headers: {},
-        },
-        {
-          auth: 'required',
-          retryOn401: false,
-        }
-      );
+      if (loginMode === 'password') {
+        await authAdapter.logout();
+      }
     } catch (error) {
       console.error('Logout request failed:', error);
     } finally {
       authSessionStore.clearSession();
+      setCurrentUser(null);
       setUser(null);
       setStatus('unauthenticated');
+      setReady(true);
+
+      if (loginMode === 'gateway') {
+        const gatewayLogoutUrl = getGatewayLogoutUrl();
+        if (gatewayLogoutUrl) {
+          window.location.assign(gatewayLogoutUrl);
+        }
+      }
     }
-  }, []);
+  }, [currentUser]);
+
+  const hasPermission = useCallback((flag: string) => phase2HasPermission(currentUser, flag), [currentUser]);
+
+  const hasAnyPermission = useCallback((flags: string[]) => phase2HasAnyPermission(currentUser, flags), [currentUser]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       ready,
       user,
+      currentUser,
+      permissionFlags: currentUser?.permission_flags ?? [],
+      derived:
+        currentUser?.derived ??
+        (currentUser
+          ? {
+              is_admin: currentUser.is_admin,
+              can_manage_users: currentUser.is_admin || phase2HasAnyPermission(currentUser, ['admin:user:list', 'admin:user:update']),
+              can_manage_roles: currentUser.is_admin || phase2HasAnyPermission(currentUser, ['admin:role:list', 'admin:role:update']),
+            }
+          : null),
       status,
       login,
-      setupPassword,
       changePassword,
       logout,
       refresh,
       clearAuthCache,
+      hasPermission,
+      hasAnyPermission,
     }),
-    [changePassword, login, logout, ready, refresh, setupPassword, status, user]
+    [changePassword, currentUser, hasAnyPermission, hasPermission, login, logout, ready, refresh, status, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

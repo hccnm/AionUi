@@ -20,6 +20,7 @@ export type BuildAgentConversationInput = {
   agent_name?: string;
   preset_assistant_id?: string;
   workspace: string;
+  workspace_id?: string;
   model: TProviderWithModel;
   cli_path?: string;
   custom_agent_id?: string;
@@ -56,6 +57,7 @@ export function buildAgentConversationParams(input: BuildAgentConversationInput)
     agent_name,
     preset_assistant_id,
     workspace,
+    workspace_id,
     model,
     cli_path,
     custom_agent_id,
@@ -72,10 +74,12 @@ export function buildAgentConversationParams(input: BuildAgentConversationInput)
   const effectivePresetAssistantId = preset_assistant_id || custom_agent_id;
   const type = getConversationTypeForBackend(is_preset ? effectivePresetType : backend);
   const extra: ICreateConversationParams['extra'] = {
-    workspace,
     custom_workspace,
     ...extraOverrides,
   };
+  if (!workspace_id) {
+    extra.workspace = workspace;
+  }
 
   if (is_preset) {
     // Transient create-request fields: backend's create handler consumes
@@ -118,6 +122,7 @@ export function buildAgentConversationParams(input: BuildAgentConversationInput)
     type,
     model,
     name,
+    workspace_id,
     extra,
   };
 }

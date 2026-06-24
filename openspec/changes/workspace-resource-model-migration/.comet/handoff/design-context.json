@@ -1,0 +1,14 @@
+{
+  "change": "workspace-resource-model-migration",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "9bed2f1626828101c310f4f20e22732a8dda9e6cf747dbd3428913086f7c023b",
+  "files": [
+    { "path": "openspec/changes/workspace-resource-model-migration/proposal.md", "sha256": "eaa56fb83c2511e4fa95a7d4bca4048dd2967c51b8bbef75fc2573466f3efd74" },
+    { "path": "openspec/changes/workspace-resource-model-migration/design.md", "sha256": "96a5f47b6a0abe85d0047fd23feb69a9061d078bb3243c887eb25ddc61fe0750" },
+    { "path": "openspec/changes/workspace-resource-model-migration/tasks.md", "sha256": "02ed4e73c3bfafb9f3c0273a0a8d73ed79fce4ae41368372e55b459e692f738d" },
+    { "path": "openspec/changes/workspace-resource-model-migration/specs/workspace-resources/spec.md", "sha256": "f775515529a8bb6722aa2f681589647c1e0038805591bb7abbf83a1057a49a29" }
+  ]
+}
