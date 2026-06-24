@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace 资源模型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="./prototype.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span>AionWeb 二阶段</div>
+      <a class="nav-link" href="./index.html"><i class="fa-solid fa-map"></i>总览地图</a>
+      <a class="nav-link" href="./auth-shell.html"><i class="fa-solid fa-shield-halved"></i>登录与权限壳</a>
+      <a class="nav-link active" href="./resources.html"><i class="fa-solid fa-diagram-project"></i>Workspace 资源</a>
+      <a class="nav-link" href="./runtime.html"><i class="fa-solid fa-terminal"></i>Runtime 运行态</a>
+      <a class="nav-link" href="./admin.html"><i class="fa-solid fa-users-gear"></i>Admin 管理</a>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="crumb">Change 2 / workspace-resource-model-migration</div>
+          <div class="title">Workspace 不再是本地绝对路径</div>
+          <div class="subtitle">资源链路是 SSH Credential → Git Project → Workspace，Guid 创建会话时传 workspace_id。</div>
+        </div>
+        <a class="btn primary" href="./runtime.html"><i class="fa-solid fa-play"></i>打开 Runtime 草图</a>
+      </div>
+
+      <section class="grid-2">
+        <div class="card">
+          <div class="card-head"><strong>Settings / Resources</strong><span class="badge">资源管理页</span></div>
+          <div class="card-body space-y-4">
+            <div class="screen">
+              <div class="font-bold mb-3">SSH Credentials</div>
+              <div class="grid grid-cols-3 gap-2">
+                <div class="field">名称：GitHub Key</div>
+                <div class="field col-span-2">私钥输入区，提交后清空</div>
+              </div>
+              <div class="mt-3"><button class="btn primary">上传</button> <button class="btn">生成</button></div>
+            </div>
+
+            <div class="screen">
+              <div class="font-bold mb-3">Git Projects</div>
+              <table class="table">
+                <tr><td>aion-web</td><td>main</td><td><span class="badge green">active</span></td><td>Verify / Sync</td></tr>
+              </table>
+            </div>
+
+            <div class="screen">
+              <div class="font-bold mb-3">Workspaces</div>
+              <table class="table">
+                <tr><td>Aion Web Main</td><td>aion-web/main</td><td><span class="badge green">active</span></td><td>Open Runtime / Rename / Archive</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><strong>Guid 首页选择 Workspace</strong><span class="badge orange">验证重点</span></div>
+          <div class="card-body">
+            <div class="screen">
+              <div class="text-lg font-bold mb-2">你想构建什么？</div>
+              <div class="field mb-3">输入需求：帮我做一个设置页</div>
+              <div class="flex justify-between items-center">
+                <span class="badge">Workspace: aion-web/main</span>
+                <button class="btn primary">发送</button>
+              </div>
+            </div>
+            <div class="note mt-5">创建 conversation 时请求应包含 `workspace_id`，不应把 `/srv/...` 或本地绝对路径写入 `extra.workspace`。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

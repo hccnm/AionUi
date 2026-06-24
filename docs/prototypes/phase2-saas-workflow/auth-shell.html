@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录与权限壳</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="./prototype.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span>AionWeb 二阶段</div>
+      <a class="nav-link" href="./index.html"><i class="fa-solid fa-map"></i>总览地图</a>
+      <a class="nav-link active" href="./auth-shell.html"><i class="fa-solid fa-shield-halved"></i>登录与权限壳</a>
+      <a class="nav-link" href="./resources.html"><i class="fa-solid fa-diagram-project"></i>Workspace 资源</a>
+      <a class="nav-link" href="./runtime.html"><i class="fa-solid fa-terminal"></i>Runtime 运行态</a>
+      <a class="nav-link" href="./admin.html"><i class="fa-solid fa-users-gear"></i>Admin 管理</a>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="crumb">Change 1 / saas-auth-shell-permissions</div>
+          <div class="title">登录后只信 `/api/auth/me`</div>
+          <div class="subtitle">这是整个 SaaS 前端的入口：当前是否登录、是谁、有哪些权限，都从这里拿。</div>
+        </div>
+        <span class="badge green">验证入口：登录 / 刷新 / 菜单显隐</span>
+      </div>
+
+      <section class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <strong>登录态判断</strong>
+            <span class="badge">唯一业务入口</span>
+          </div>
+          <div class="card-body">
+            <div class="flow">
+              <div class="flow-node">打开应用</div>
+              <i class="fa-solid fa-arrow-right arrow"></i>
+              <div class="flow-node">GET /api/auth/me</div>
+              <i class="fa-solid fa-arrow-right arrow"></i>
+              <div class="flow-node">进入主界面或登录页</div>
+            </div>
+            <div class="note mt-5">`/api/auth/status` 只做兼容和启动探测，不再作为菜单和登录态主依据。</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <strong>权限返回示例</strong>
+            <span class="badge green">Admin 可见</span>
+          </div>
+          <div class="card-body">
+            <div class="code-box">{
+  user: "13800138000",
+  roles: ["管理员"],
+  permission_flags: [
+    "admin:user:list",
+    "admin:role:list"
+  ],
+  derived: {
+    can_manage_users: true,
+    can_manage_roles: true
+  }
+}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card mt-6">
+        <div class="card-head"><strong>你验证时看什么</strong></div>
+        <div class="card-body">
+          <table class="table">
+            <thead><tr><th>场景</th><th>预期</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>未登录打开应用</td><td>跳到登录页</td><td>不应靠 status 判断业务登录态</td></tr>
+              <tr><td>登录后刷新页面</td><td>通过 /api/auth/me 恢复用户</td><td>AuthContext 有 currentUser 和 permissionFlags</td></tr>
+              <tr><td>权限不足用户</td><td>Admin 入口隐藏</td><td>后端 403 仍是最终安全边界</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

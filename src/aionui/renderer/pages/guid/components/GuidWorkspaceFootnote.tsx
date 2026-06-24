@@ -12,6 +12,7 @@ import { Close, Down } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import styles from '../index.module.css';
 
 type GuidWorkspaceFootnoteProps = {
@@ -60,6 +61,7 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
   onClearWorkspace,
 }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const recentWorkspaces = getRecentWorkspaces();
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,10 +116,20 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
     setSearchQuery('');
   }, []);
 
+  const hasWorkspaceResources = workspaceResources.length > 0;
+
   const toggleOpen = useCallback(() => {
     if (open) closeDropdown();
     else openDropdown();
   }, [open, openDropdown, closeDropdown]);
+
+  const handleEmptyWorkspaceClick = useCallback(() => {
+    if (hasWorkspaceResources || recentWorkspaces.length > 0) {
+      toggleOpen();
+      return;
+    }
+    void navigate('/settings/resources');
+  }, [hasWorkspaceResources, navigate, recentWorkspaces.length, toggleOpen]);
 
   // close on outside click
   useEffect(() => {
@@ -144,7 +156,6 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
       name.toLowerCase().includes(searchQuery.toLowerCase()) || p.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
-  const hasWorkspaceResources = workspaceResources.length > 0;
   const filteredWorkspaceResources = workspaceResources.filter((workspace) => {
     if (!searchQuery) return true;
     const haystack = `${workspace.name} ${workspace.source_type} ${workspace.branch_ref ?? ''}`.toLowerCase();
@@ -326,10 +337,14 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
             ref={triggerRef as React.RefObject<HTMLButtonElement>}
             className={styles.workspaceEmptyBtn}
             data-testid='workspace-selector-btn'
-            onClick={recentWorkspaces.length > 0 ? toggleOpen : handleBrowseWorkspace}
+            onClick={handleEmptyWorkspaceClick}
           >
             <FolderIcon size={14} />
-            <span>{t('guid.workspace.workInProject')}</span>
+            <span>
+              {hasWorkspaceResources || recentWorkspaces.length > 0
+                ? t('guid.workspace.workInProject')
+                : t('guid.workspace.createWorkspace', { defaultValue: 'Create Workspace first' })}
+            </span>
             {(hasWorkspaceResources || recentWorkspaces.length > 0) && (
               <Down
                 theme='outline'

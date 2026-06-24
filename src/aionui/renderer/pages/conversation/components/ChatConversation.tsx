@@ -94,7 +94,7 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
   const { t } = useTranslation();
   const navigate = useNavigate();
   const isCreatingRef = useRef(false);
-  if (!conversation.extra?.workspace) return null;
+  if (!conversation.workspace_id && !conversation.extra?.workspace) return null;
   return (
     <Tooltip content={t('conversation.workspace.createNewConversation')}>
       <Button
@@ -157,7 +157,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     initialModel: conversation.model,
     onSelectModel,
   });
-  const workspaceEnabled = Boolean(conversation.extra?.workspace);
+  const workspaceEnabled = Boolean(conversation.workspace_id || conversation.extra?.workspace);
   const { info: presetAssistantInfo } = usePresetAssistantInfo(conversation);
   const aionrsAssistantId = resolveAssistantConfigId(conversation) ?? undefined;
   const layout = useLayoutContext();
@@ -175,7 +175,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
       </div>
     ),
     workspaceEnabled,
-    workspacePath: conversation.extra?.workspace,
+    workspacePath: conversation.extra?.workspace || conversation.name,
     isTemporaryWorkspace: (conversation.extra as { is_temporary_workspace?: boolean } | undefined)
       ?.is_temporary_workspace,
     backend: 'aionrs' as const,
@@ -187,7 +187,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
       <AionrsChat
         conversation_id={conversation.id}
         conversation={conversation}
-        workspace={conversation.extra.workspace}
+        workspace={conversation.extra.workspace || conversation.name}
         modelSelection={modelSelection}
         session_mode={conversation.extra?.session_mode}
         cron_job_id={(conversation.extra as { cron_job_id?: string })?.cron_job_id}
@@ -208,7 +208,7 @@ const ChatConversation: React.FC<{
 }> = ({ conversation, hideSendBox }) => {
   const { t } = useTranslation();
   const { openPreview } = usePreviewContext();
-  const workspaceEnabled = Boolean(conversation?.extra?.workspace);
+  const workspaceEnabled = Boolean(conversation?.workspace_id || conversation?.extra?.workspace);
   const layout = useLayoutContext();
   const isMobile = Boolean(layout?.isMobile);
 

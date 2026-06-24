@@ -159,7 +159,7 @@ export async function getDefaultAionrsModel(): Promise<TProviderWithModel> {
  * Build ICreateConversationParams for a CLI agent.
  * The backend will automatically fill in derived fields (gateway.cli_path, runtimeValidation, etc.).
  */
-export async function buildCliAgentParams(agent: AgentMetadata, workspace: string): Promise<ICreateConversationParams> {
+export async function buildCliAgentParams(agent: AgentMetadata, workspace: string, workspaceId?: string): Promise<ICreateConversationParams> {
   const agentKey = agent.backend || agent.agent_type;
   const type = getConversationTypeForBackend(agentKey);
   const preferredMode = await resolvePreferredMode(agentKey);
@@ -179,6 +179,7 @@ export async function buildCliAgentParams(agent: AgentMetadata, workspace: strin
     agent_id: agent.id,
     agent_name: agent.name,
     workspace,
+    workspace_id: workspaceId,
     model,
     session_mode: preferredMode,
     current_model_id: preferredAcpModelId,
@@ -193,7 +194,8 @@ export async function buildCliAgentParams(agent: AgentMetadata, workspace: strin
 export async function buildPresetAssistantParams(
   assistant: Assistant,
   workspace: string,
-  language: string
+  language: string,
+  workspaceId?: string
 ): Promise<ICreateConversationParams> {
   const preset_agent_type = assistant.preset_agent_type || 'claude';
   const custom_agent_id = assistant.id;
@@ -220,6 +222,7 @@ export async function buildPresetAssistantParams(
     name: assistant.name,
     agent_name: assistant.name,
     workspace,
+    workspace_id: workspaceId,
     custom_agent_id,
     is_preset: true,
     preset_agent_type,

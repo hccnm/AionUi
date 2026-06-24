@@ -8,6 +8,7 @@ import type { IDirOrFile, IWorkspaceFlatFile } from './ipcBridge';
 
 type RawFsEntry = { name: string; type: string };
 export type RawWorkspaceFlatFile = { name: string; full_path: string; relative_path: string };
+type WorkspaceRuntimeEntry = { name: string; path: string; type: string };
 
 // ── Path helpers ───────────────────────────────────────────────────────
 
@@ -73,6 +74,46 @@ export function fromBackendWorkspaceList(raw: RawFsEntry[], workspace: string, r
       name: dirName,
       fullPath: `${ws}/${relPath}`,
       relativePath: relPath,
+      isDir: true,
+      isFile: false,
+      children,
+    },
+  ];
+}
+
+export function fromWorkspaceRuntimeEntries(
+  entries: WorkspaceRuntimeEntry[],
+  workspaceLabel: string,
+  relPath: string
+): IDirOrFile[] {
+  const root = stripTrailingSlash(workspaceLabel || 'workspace');
+  const base = relPath === '.' ? '' : relPath;
+  const children = entries.map((item) => ({
+    name: item.name || '',
+    fullPath: `${root}/${item.path}`,
+    relativePath: item.path,
+    isDir: item.type === 'directory',
+    isFile: item.type !== 'directory',
+  }));
+
+  if (!base) {
+    return [
+      {
+        name: root.split('/').pop() || root,
+        fullPath: root,
+        relativePath: '',
+        isDir: true,
+        isFile: false,
+        children,
+      },
+    ];
+  }
+
+  return [
+    {
+      name: base.split('/').pop() || base,
+      fullPath: `${root}/${base}`,
+      relativePath: base,
       isDir: true,
       isFile: false,
       children,

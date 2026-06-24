@@ -11,6 +11,13 @@ export interface SkillSuggestion {
   content: string;
 }
 
+export interface ParsedLoadSkills {
+  skills: string[];
+  text: string;
+}
+
+const LOAD_SKILL_PATTERN = /\[LOAD_SKILL:\s*([^[\]]+?)\s*\]/gi;
+
 // Placeholder patterns that indicate the AI echoed the template instead of generating real content
 const PLACEHOLDER_NAME_PATTERNS = [/^skill-name$/i, /^your[- ]skill[- ]name/i, /^description of/i];
 const PLACEHOLDER_DESC_PATTERNS = [/^one-line description/i, /^your[- ]skill[- ]name/i];
@@ -100,4 +107,39 @@ export function stripSkillSuggest(text: string): string {
  */
 export function hasSkillSuggest(text: string): boolean {
   return /\[SKILL_SUGGEST\]/i.test(text);
+}
+
+/**
+ * Extract inline [LOAD_SKILL: ...] directives from message text and return the
+ * remaining visible body content.
+ */
+export function parseLoadSkills(text: string): ParsedLoadSkills {
+  if (!text || typeof text !== 'string') {
+    return { skills: [], text };
+  }
+
+  const skills: string[] = [];
+  const stripped = text.replace(LOAD_SKILL_PATTERN, (_match, rawName: string) => {
+    const name = rawName.trim();
+    if (name) {
+      skills.push(name);
+    }
+    return '';
+  });
+
+  if (skills.length === 0) {
+    return { skills, text };
+  }
+
+  const normalizedText = stripped
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n')
+    .trim();
+
+  return {
+    skills,
+    text: normalizedText,
+  };
 }

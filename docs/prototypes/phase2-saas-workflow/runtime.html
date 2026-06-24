@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace Runtime</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="./prototype.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span>AionWeb 二阶段</div>
+      <a class="nav-link" href="./index.html"><i class="fa-solid fa-map"></i>总览地图</a>
+      <a class="nav-link" href="./auth-shell.html"><i class="fa-solid fa-shield-halved"></i>登录与权限壳</a>
+      <a class="nav-link" href="./resources.html"><i class="fa-solid fa-diagram-project"></i>Workspace 资源</a>
+      <a class="nav-link active" href="./runtime.html"><i class="fa-solid fa-terminal"></i>Runtime 运行态</a>
+      <a class="nav-link" href="./admin.html"><i class="fa-solid fa-users-gear"></i>Admin 管理</a>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="crumb">Change 3 / workspace-execution-runtime</div>
+          <div class="title">在 workspace_id 下运行一切</div>
+          <div class="subtitle">文件、终端、TestRun、PreviewEnv、日志、Artifact 都围绕当前 Workspace。</div>
+        </div>
+        <span class="badge green">/runtime?workspace_id=ws-demo</span>
+      </div>
+
+      <section class="card mb-5">
+        <div class="card-body flex justify-between items-center">
+          <div>
+            <div class="font-bold">当前 Workspace</div>
+            <div class="text-sm text-slate-500">Aion Web Main · aion-web/main · active</div>
+          </div>
+          <div class="field">切换 Workspace</div>
+        </div>
+      </section>
+
+      <section class="grid-3">
+        <div class="card">
+          <div class="card-head"><strong>文件</strong><span class="badge">relative path</span></div>
+          <div class="card-body">
+            <div class="field mb-3">路径：/</div>
+            <div class="mb-3"><button class="btn">刷新</button> <button class="btn">新建目录</button> <button class="btn">上传文本</button></div>
+            <div class="file-row"><span><i class="fa-solid fa-folder"></i> src</span><span class="badge gray">目录</span></div>
+            <div class="file-row"><span><i class="fa-solid fa-file-lines"></i> README.md</span><span class="badge green">v1</span></div>
+            <div class="file-row"><span><i class="fa-solid fa-file-code"></i> package.json</span><span class="badge green">v3</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><strong>编辑器</strong><button class="btn primary">保存</button></div>
+          <div class="card-body">
+            <div class="code-box"># Aion Web
+
+这是 README.md 的 Workspace 内容。
+
+保存时发送：
+workspace_id = ws-demo
+path = README.md
+base_version = v1</div>
+            <div class="note mt-4">如果后端返回 VERSION_CONFLICT，页面提示“请重新加载后再保存”。</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><strong>执行详情</strong><span class="badge orange">WebSocket 事件</span></div>
+          <div class="card-body space-y-3">
+            <div class="screen">
+              <div class="font-bold">PreviewEnv running</div>
+              <a class="text-teal-700 text-sm" href="#">https://preview.aionweb.mock/exec-1</a>
+            </div>
+            <div class="screen">
+              <div class="font-bold mb-2">日志</div>
+              <div class="text-xs font-mono text-slate-600">[info] Execution started<br>[info] Artifact ready</div>
+            </div>
+            <div class="screen">
+              <div class="font-bold mb-2">Artifacts</div>
+              <button class="btn">下载 runtime-report.zip</button>
+            </div>
+            <div><button class="btn danger">Cancel</button> <button class="btn">Redeploy</button> <button class="btn primary">Approve Retry</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card mt-5">
+        <div class="card-head"><strong>你验证时不应该看到</strong></div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="note">不展示服务器绝对路径，例如 /srv/aion/xxx。</div>
+            <div class="note">不展示 pod、namespace、container address、随机宿主端口。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

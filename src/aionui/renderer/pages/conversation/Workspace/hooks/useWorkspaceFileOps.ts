@@ -16,6 +16,7 @@ import {
 } from '@/renderer/pages/conversation/Preview/constants';
 import { classifyPreviewError, previewErrorToI18nKey } from '@/renderer/utils/previewError';
 import { removeWorkspaceEntry, renameWorkspaceEntry } from '@/renderer/utils/file/workspaceFs';
+import { workspaceRuntimeAdapter } from '@/common/resources/workspaceRuntime';
 import { useCallback } from 'react';
 import type { MessageApi, RenameModalState, DeleteModalState } from '../types';
 import type { FileOrFolderItem } from '@/renderer/utils/file/fileTypes';
@@ -23,6 +24,7 @@ import { getPathSeparator, replacePathInList, updateTreeForRename } from '../uti
 
 interface UseWorkspaceFileOpsOptions {
   workspace: string;
+  workspaceId?: string;
   eventPrefix: 'acp' | 'codex' | 'aionrs';
   messageApi: MessageApi;
   t: (key: string) => string;
@@ -58,6 +60,7 @@ interface UseWorkspaceFileOpsOptions {
 export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
   const {
     workspace,
+    workspaceId,
     eventPrefix,
     messageApi,
     t,
@@ -134,7 +137,11 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
     if (!deleteModal.target) return;
     try {
       setDeleteModal((prev) => ({ ...prev, loading: true }));
-      await removeWorkspaceEntry(deleteModal.target.fullPath);
+      if (workspaceId) {
+        await workspaceRuntimeAdapter.delete(workspaceId, deleteModal.target.relativePath || '.');
+      } else {
+        await removeWorkspaceEntry(deleteModal.target.fullPath);
+      }
 
       messageApi.success(t('conversation.workspace.contextMenu.deleteSuccess'));
       setSelected([]);
@@ -149,6 +156,7 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
     }
   }, [
     deleteModal.target,
+    workspaceId,
     closeDeleteModal,
     eventPrefix,
     messageApi,
@@ -217,7 +225,11 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
 
     try {
       setRenameLoading(true);
-      await waitWithTimeout(renameWorkspaceEntry(target.fullPath, trimmedName));
+      if (workspaceId) {
+        await waitWithTimeout(workspaceRuntimeAdapter.rename(workspaceId, target.relativePath || '.', newRelativePath));
+      } else {
+        await waitWithTimeout(renameWorkspaceEntry(target.fullPath, trimmedName));
+      }
 
       closeRenameModal();
 
@@ -255,6 +267,7 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
     messageApi,
     renameLoading,
     renameModal,
+    workspaceId,
     t,
     waitWithTimeout,
     setFiles,
@@ -315,7 +328,9 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
           }
         } else {
           // 文本文件：使用 UTF-8 编码读取 / Text files: Read using UTF-8 encoding
-          content = await ipcBridge.fs.readFile.invoke({ path: nodeData.fullPath, workspace });
+          content = workspaceId
+            ? (await workspaceRuntimeAdapter.readFile(workspaceId, nodeData.relativePath || '.')).content
+            : await ipcBridge.fs.readFile.invoke({ path: nodeData.fullPath, workspace });
           if (content == null) {
             throw null;
           }
@@ -351,7 +366,7 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
         messageApi.error(t(previewErrorToI18nKey(kind)));
       }
     },
-    [closeContextMenu, openPreview, workspace, messageApi, t]
+    [closeContextMenu, openPreview, workspace, workspaceId, messageApi, t]
   );
 
   /**

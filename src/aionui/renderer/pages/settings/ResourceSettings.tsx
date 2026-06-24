@@ -90,7 +90,21 @@ const ResourceSettings: React.FC = () => {
     }
   };
 
-  const createWorkspace = async () => {
+  const createBlankWorkspace = async () => {
+    try {
+      await workspaceResourceAdapter.createWorkspace({
+        name: workspaceName.trim(),
+        source_type: 'blank',
+      });
+      setWorkspaceName('');
+      await reload();
+      Message.success('Blank workspace created');
+    } catch (error) {
+      Message.error(error instanceof Error ? error.message : 'Failed to create workspace');
+    }
+  };
+
+  const createGitWorkspace = async () => {
     try {
       await workspaceResourceAdapter.createWorkspace({
         name: workspaceName.trim(),
@@ -100,7 +114,7 @@ const ResourceSettings: React.FC = () => {
       });
       setWorkspaceName('');
       await reload();
-      Message.success('Workspace created');
+      Message.success('Git workspace created');
     } catch (error) {
       Message.error(error instanceof Error ? error.message : 'Failed to create workspace');
     }
@@ -182,9 +196,17 @@ const ResourceSettings: React.FC = () => {
           <Space direction='vertical' className='w-full'>
             <Input placeholder='Workspace name' value={workspaceName} onChange={setWorkspaceName} />
             <Input placeholder='Git project id' value={selectedGitProjectId} onChange={setSelectedGitProjectId} />
-            <Button type='primary' disabled={!workspaceName.trim() || !selectedGitProjectId} onClick={() => void createWorkspace()}>
-              Create Workspace
-            </Button>
+            <Space wrap>
+              <Button type='primary' disabled={!workspaceName.trim()} onClick={() => void createBlankWorkspace()}>
+                Create Blank Workspace
+              </Button>
+              <Button disabled={!workspaceName.trim() || !selectedGitProjectId} onClick={() => void createGitWorkspace()}>
+                Create Git Workspace
+              </Button>
+            </Space>
+            {workspaces.length === 0 && (
+              <Text type='secondary'>No workspace yet. Create a blank workspace first, then start a conversation from the home page.</Text>
+            )}
             {workspaces.map((workspace) => (
               <div key={workspace.id} className='flex items-center justify-between gap-12px rounded-8px bg-fill-1 px-12px py-8px'>
                 <div className='min-w-0'>

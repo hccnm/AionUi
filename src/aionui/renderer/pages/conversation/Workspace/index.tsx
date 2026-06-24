@@ -44,6 +44,7 @@ import './workspace.css';
 const ChatWorkspace: React.FC<WorkspaceProps> = ({
   conversation_id,
   workspace,
+  workspaceId,
   isTemporaryWorkspace: isTemporaryWorkspaceProp,
   eventPrefix: eventPrefixProp,
   messageApi: externalMessageApi,
@@ -82,7 +83,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
 
   // Initialize all hooks
   const { isWorkspaceCollapsed, setIsWorkspaceCollapsed } = useWorkspaceCollapse();
-  const treeHook = useWorkspaceTree({ workspace, conversation_id, eventPrefix: workspaceEventPrefix });
+  const treeHook = useWorkspaceTree({ workspace, workspaceId, conversation_id, eventPrefix: workspaceEventPrefix });
   const modalsHook = useWorkspaceModals();
   const pasteHook = useWorkspacePaste({
     conversation_id: conversation_id,
@@ -109,6 +110,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
 
   const fileOpsHook = useWorkspaceFileOps({
     workspace,
+    workspaceId,
     eventPrefix: workspaceEventPrefix,
     messageApi,
     t,

@@ -20,7 +20,7 @@ import FilePreview from '@renderer/components/media/FilePreview';
 import HorizontalFileList from '@renderer/components/media/HorizontalFileList';
 import MarkdownView from '@renderer/components/Markdown';
 import { stripThinkTags, hasThinkTags } from '@renderer/utils/chat/thinkTagFilter';
-import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSuggestParser';
+import { parseLoadSkills, stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSuggestParser';
 
 /**
  * Format a timestamp for message display.
@@ -95,6 +95,8 @@ const useFormatContent = (content: string) => {
 };
 
 const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
+  const isUserMessage = message.position === 'right';
+
   // Filter think tags from content before rendering
   // 在渲染前过滤 think 标签
   const contentToRender = useMemo(() => {
@@ -112,11 +114,18 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
     return content;
   }, [message.content.content]);
 
-  const { text, files } = parseFileMarker(contentToRender);
+  const parsedLoadSkills = useMemo(
+    () =>
+      typeof contentToRender === 'string' && !isUserMessage
+        ? parseLoadSkills(contentToRender)
+        : { skills: [] as string[], text: contentToRender },
+    [contentToRender, isUserMessage]
+  );
+
+  const { text, files } = parseFileMarker(parsedLoadSkills.text);
   const { data, json } = useFormatContent(text);
   const { t } = useTranslation();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
-  const isUserMessage = message.position === 'right';
   const isTeammateMessage = message.position === 'left' && message.content.teammateMessage === true;
   const shouldRenderPlainText = isUserMessage;
   const conversationContext = useConversationContextSafe();
@@ -133,9 +142,12 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
   }
 
   const handleCopy = () => {
+    const loadSkillsPrefix = parsedLoadSkills.skills.length
+      ? `${t('conversation.skills.loaded', { defaultValue: 'Loaded Skills' })}: ${parsedLoadSkills.skills.join(', ')}\n\n`
+      : '';
     const baseText = shouldRenderPlainText ? text : json ? JSON.stringify(data, null, 2) : text;
     const fileList = files.length ? `Files:\n${files.map((path) => `- ${path}`).join('\n')}\n\n` : '';
-    const textToCopy = fileList + baseText;
+    const textToCopy = fileList + loadSkillsPrefix + baseText;
     copyText(textToCopy)
       .then(() => {
         setShowCopyAlert(true);
@@ -207,6 +219,31 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
                 : undefined),
           }}
         >
+          {parsedLoadSkills.skills.length > 0 && !shouldRenderPlainText && (
+            <div
+              className='mb-10px rounded-8px bg-fill-1 px-10px py-8px'
+              style={{ border: '1px solid var(--color-border-1, #e5e6eb)' }}
+              data-testid='message-load-skills'
+            >
+              <div className='text-12px font-500 text-t-secondary mb-6px'>
+                {t('conversation.skills.loaded', { defaultValue: 'Loaded Skills' })}
+              </div>
+              <div className='flex flex-wrap gap-6px'>
+                {parsedLoadSkills.skills.map((skill) => (
+                  <span
+                    key={skill}
+                    className='inline-flex items-center rounded-6px bg-white px-8px py-2px text-12px text-t-primary'
+                    style={{
+                      border: '1px solid var(--color-border-1, #e5e6eb)',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    }}
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}
           {shouldRenderPlainText ? (
             <div className='whitespace-pre-wrap break-words' data-testid='message-text-content'>

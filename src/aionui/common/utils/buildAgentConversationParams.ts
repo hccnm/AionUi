@@ -77,9 +77,6 @@ export function buildAgentConversationParams(input: BuildAgentConversationInput)
     custom_workspace,
     ...extraOverrides,
   };
-  if (!workspace_id) {
-    extra.workspace = workspace;
-  }
 
   if (is_preset) {
     // Transient create-request fields: backend's create handler consumes

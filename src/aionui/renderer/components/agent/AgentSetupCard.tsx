@@ -82,6 +82,7 @@ const AgentSetupCard: React.FC<AgentSetupCardProps> = ({
 
         const createParams: ICreateConversationParams = {
           type: conversation_type,
+          workspace_id: conversation.workspace_id,
           model: {
             id: 'default',
             name: 'Default',
@@ -91,7 +92,7 @@ const AgentSetupCard: React.FC<AgentSetupCardProps> = ({
             api_key: '',
           },
           extra: {
-            workspace: conversation.extra?.workspace || '',
+            ...(conversation.workspace_id ? {} : { workspace: conversation.extra?.workspace || '' }),
             custom_workspace: conversation.extra?.custom_workspace || false,
             backend: agent.backend,
             preset_context: ((conversation.extra as Record<string, unknown>)?.preset_rules ||

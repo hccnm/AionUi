@@ -16,6 +16,7 @@ export type MessageApi = ReturnType<typeof Message.useMessage>[0];
  */
 export interface WorkspaceProps {
   workspace: string;
+  workspaceId?: string;
   conversation_id: string;
   /**
    * Authoritative "is this an auto-provisioned temporary workspace" flag.

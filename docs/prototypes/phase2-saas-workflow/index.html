@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AionWeb 二阶段 SaaS 原型总览</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="./prototype.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span>AionWeb 二阶段</div>
+      <a class="nav-link active" href="./index.html"><i class="fa-solid fa-map"></i>总览地图</a>
+      <a class="nav-link" href="./auth-shell.html"><i class="fa-solid fa-shield-halved"></i>登录与权限壳</a>
+      <a class="nav-link" href="./resources.html"><i class="fa-solid fa-diagram-project"></i>Workspace 资源</a>
+      <a class="nav-link" href="./runtime.html"><i class="fa-solid fa-terminal"></i>Runtime 运行态</a>
+      <a class="nav-link" href="./admin.html"><i class="fa-solid fa-users-gear"></i>Admin 管理</a>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="crumb">原型 / 总览</div>
+          <div class="title">从“本地文件夹聊天”到“SaaS Workspace 平台”</div>
+          <div class="subtitle">这张图把 4 个 change 串成一条验证主线：登录拿权限 → 选择 Workspace → 进入 Runtime → 管理用户角色。</div>
+        </div>
+        <span class="badge green"><i class="fa-solid fa-check"></i>4 个 change 已完成</span>
+      </div>
+
+      <section class="card mb-6">
+        <div class="card-body">
+          <div class="flow">
+            <div class="flow-node">登录壳<br><span class="text-xs text-slate-500">/api/auth/me</span></div>
+            <i class="fa-solid fa-arrow-right arrow"></i>
+            <div class="flow-node">Workspace 资源<br><span class="text-xs text-slate-500">SSH / Git / Workspace</span></div>
+            <i class="fa-solid fa-arrow-right arrow"></i>
+            <div class="flow-node">Runtime 运行态<br><span class="text-xs text-slate-500">文件 / 终端 / 执行</span></div>
+            <i class="fa-solid fa-arrow-right arrow"></i>
+            <div class="flow-node">Admin 管理<br><span class="text-xs text-slate-500">用户 / 角色</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid-2">
+        <a class="card module-card no-underline text-inherit" href="./auth-shell.html">
+          <span class="badge">Change 1</span>
+          <h2 class="mt-4 text-xl font-bold">SaaS 登录与权限壳</h2>
+          <p class="mt-2 text-sm text-slate-600">统一用 /api/auth/me 判断当前用户、登录态和权限。后续菜单和管理入口都依赖这里。</p>
+          <div class="mt-5 text-sm font-semibold text-teal-700">查看验证草图 <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+
+        <a class="card module-card no-underline text-inherit" href="./resources.html">
+          <span class="badge">Change 2</span>
+          <h2 class="mt-4 text-xl font-bold">Workspace 资源模型</h2>
+          <p class="mt-2 text-sm text-slate-600">把 SSH Key、Git Project、Workspace 变成 SaaS 资源，不再信任本地绝对路径。</p>
+          <div class="mt-5 text-sm font-semibold text-teal-700">查看验证草图 <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+
+        <a class="card module-card no-underline text-inherit" href="./runtime.html">
+          <span class="badge">Change 3</span>
+          <h2 class="mt-4 text-xl font-bold">Workspace Runtime</h2>
+          <p class="mt-2 text-sm text-slate-600">在 workspace_id 下操作文件、终端、TestRun、PreviewEnv、日志和 Artifact。</p>
+          <div class="mt-5 text-sm font-semibold text-teal-700">查看验证草图 <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+
+        <a class="card module-card no-underline text-inherit" href="./admin.html">
+          <span class="badge">Change 4</span>
+          <h2 class="mt-4 text-xl font-bold">Admin 用户角色管理</h2>
+          <p class="mt-2 text-sm text-slate-600">根据权限显示 Admin Users / Admin Roles，并支持用户状态、密码、角色和权限配置。</p>
+          <div class="mt-5 text-sm font-semibold text-teal-700">查看验证草图 <i class="fa-solid fa-arrow-right"></i></div>
+        </a>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

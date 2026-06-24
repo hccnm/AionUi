@@ -208,6 +208,7 @@ interface IChatConversation<T, Extra> {
   desc?: string;
   id: string;
   type: T;
+  workspace_id?: string;
   extra: Extra;
   model: TProviderWithModel;
   status?: TChatConversationStatus | undefined;

@@ -5,6 +5,7 @@ import '@arco-design/web-react/es/_util/react-19-adapter';
 import '@arco-design/web-react/dist/css/arco.css';
 import { ConfigProvider } from '@arco-design/web-react';
 import zhCN from '@arco-design/web-react/es/locale/zh-CN';
+import { getConfigBootstrapAction } from '@web/app/configBootstrap';
 import { configService } from '@/common/config/configService';
 import { AuthProvider, useAuth } from '@renderer/hooks/context/AuthContext';
 import { ConversationHistoryProvider } from '@renderer/hooks/context/ConversationHistoryContext';
@@ -48,8 +49,16 @@ const MainApp = () => {
 
   useEffect(() => {
     let cancelled = false;
+    const action = getConfigBootstrapAction(status);
 
-    if (status !== 'authenticated') {
+    if (action === 'wait') {
+      setConfigReady(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (action === 'reset') {
       configService.reset();
       setConfigReady(true);
       return () => {
@@ -91,13 +100,11 @@ async function bootstrap() {
   await registerMockServiceWorker();
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <AppProviders>
-        <ArcoConfig>
-          <MainApp />
-        </ArcoConfig>
-      </AppProviders>
-    </React.StrictMode>
+    <AppProviders>
+      <ArcoConfig>
+        <MainApp />
+      </ArcoConfig>
+    </AppProviders>
   );
 }
 

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Input, Message, Space, Tag, Typography } from '@arco-design/web-react';
+import { Button, Card, Input, Message, Select, Space, Tag, Typography } from '@arco-design/web-react';
 import {
   AdminForbiddenError,
   adminAccessControlAdapter,
   canViewAdminRoles,
+  type AdminPermission,
   type AdminRole,
 } from '@/common/admin/adminAccessControl';
 import { useAuth } from '@/renderer/hooks/context/AuthContext';
@@ -11,21 +12,15 @@ import SettingsPageWrapper from './components/SettingsPageWrapper';
 
 const { Text } = Typography;
 
-function parsePermissions(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 const AdminRolesSettings: React.FC = () => {
   const { currentUser } = useAuth();
   const [roles, setRoles] = useState<AdminRole[]>([]);
+  const [permissionCatalog, setPermissionCatalog] = useState<AdminPermission[]>([]);
   const [selectedRole, setSelectedRole] = useState<AdminRole | null>(null);
   const [roleKey, setRoleKey] = useState('');
   const [roleName, setRoleName] = useState('');
   const [description, setDescription] = useState('');
-  const [permissions, setPermissions] = useState('');
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [forbidden, setForbidden] = useState(!canViewAdminRoles(currentUser));
   const canManage = useMemo(() => canViewAdminRoles(currentUser), [currentUser]);
   const editingSystemRole = Boolean(selectedRole?.is_system);
@@ -36,8 +31,12 @@ const AdminRolesSettings: React.FC = () => {
       return;
     }
     try {
-      const result = await adminAccessControlAdapter.listRoles();
-      setRoles(result.items);
+      const [roleResult, permissionResult] = await Promise.all([
+        adminAccessControlAdapter.listRoles(),
+        adminAccessControlAdapter.listPermissions(),
+      ]);
+      setRoles(roleResult.items);
+      setPermissionCatalog(permissionResult);
       setForbidden(false);
     } catch (error) {
       if (error instanceof AdminForbiddenError) {
@@ -57,7 +56,7 @@ const AdminRolesSettings: React.FC = () => {
     setRoleKey('');
     setRoleName('');
     setDescription('');
-    setPermissions('');
+    setPermissions([]);
   };
 
   const startEdit = (role: AdminRole) => {
@@ -65,7 +64,7 @@ const AdminRolesSettings: React.FC = () => {
     setRoleKey(role.role_key);
     setRoleName(role.role_name);
     setDescription(role.description ?? '');
-    setPermissions(role.permissions.join(','));
+    setPermissions(role.permissions);
   };
 
   const submit = async () => {
@@ -74,7 +73,7 @@ const AdminRolesSettings: React.FC = () => {
         role_key: selectedRole ? undefined : roleKey.trim(),
         role_name: roleName.trim(),
         description: description.trim() || undefined,
-        permissions: parsePermissions(permissions),
+        permissions,
       };
       if (selectedRole) {
         if (selectedRole.is_system) return;
@@ -150,13 +149,20 @@ const AdminRolesSettings: React.FC = () => {
               disabled={editingSystemRole}
               autoSize={{ minRows: 2, maxRows: 4 }}
             />
-            <Input.TextArea
-              placeholder='Permission flags, comma separated'
+            <Select
+              mode='multiple'
+              placeholder='Select permission flags'
               value={permissions}
-              onChange={setPermissions}
+              onChange={(value) => setPermissions((value as string[]) ?? [])}
               disabled={editingSystemRole}
-              autoSize={{ minRows: 5, maxRows: 10 }}
-            />
+              allowClear
+            >
+              {permissionCatalog.map((permission) => (
+                <Select.Option key={permission.key} value={permission.key}>
+                  {permission.label || permission.key}
+                </Select.Option>
+              ))}
+            </Select>
             <Space>
               <Button type='primary' disabled={!roleName.trim() || (!selectedRole && !roleKey.trim()) || editingSystemRole} onClick={() => void submit()}>
                 {selectedRole ? 'Update Role' : 'Create Role'}

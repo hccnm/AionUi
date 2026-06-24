@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin 用户角色管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="./prototype.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span>AionWeb 二阶段</div>
+      <a class="nav-link" href="./index.html"><i class="fa-solid fa-map"></i>总览地图</a>
+      <a class="nav-link" href="./auth-shell.html"><i class="fa-solid fa-shield-halved"></i>登录与权限壳</a>
+      <a class="nav-link" href="./resources.html"><i class="fa-solid fa-diagram-project"></i>Workspace 资源</a>
+      <a class="nav-link" href="./runtime.html"><i class="fa-solid fa-terminal"></i>Runtime 运行态</a>
+      <a class="nav-link active" href="./admin.html"><i class="fa-solid fa-users-gear"></i>Admin 管理</a>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="crumb">Change 4 / admin-user-role-management</div>
+          <div class="title">用户和角色由权限控制入口显隐</div>
+          <div class="subtitle">入口来自 /api/auth/me 的 permission_flags 和 derived，直接访问时仍以后端 403 为最终边界。</div>
+        </div>
+        <span class="badge green">Admin Users / Admin Roles</span>
+      </div>
+
+      <section class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <strong>Settings / Admin Users</strong>
+            <div><span class="field">搜索用户</span> <span class="field">状态筛选</span></div>
+          </div>
+          <div class="card-body">
+            <table class="table">
+              <thead><tr><th>用户</th><th>状态</th><th>角色</th><th>外部身份</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>13800138000</strong><br><span class="text-slate-500">user-demo</span></td>
+                  <td><span class="badge green">enabled</span></td>
+                  <td><span class="badge">管理员</span></td>
+                  <td><span class="badge gray">password</span></td>
+                  <td><button class="btn">禁用</button> <button class="btn">重置密码</button> <button class="btn">分配角色</button></td>
+                </tr>
+                <tr>
+                  <td><strong>ops@example.com</strong><br><span class="text-slate-500">user-ops</span></td>
+                  <td><span class="badge orange">disabled</span></td>
+                  <td><span class="badge gray">Viewer</span></td>
+                  <td><span class="badge gray">gateway</span></td>
+                  <td><button class="btn">启用</button> <button class="btn">重置密码</button> <button class="btn">分配角色</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><strong>Settings / Admin Roles</strong><button class="btn primary">新建角色</button></div>
+          <div class="card-body">
+            <div class="grid grid-cols-[260px_1fr] gap-4">
+              <div class="space-y-3">
+                <div class="screen">
+                  <div class="font-bold">管理员 <span class="badge orange">system</span></div>
+                  <div class="text-xs text-slate-500 mt-2">admin:user:list, admin:role:list...</div>
+                </div>
+                <div class="screen">
+                  <div class="font-bold">运营</div>
+                  <div class="text-xs text-slate-500 mt-2">admin:user:list</div>
+                </div>
+              </div>
+              <div class="screen">
+                <div class="label">角色 key</div>
+                <div class="field mb-3">ops</div>
+                <div class="label">角色名称</div>
+                <div class="field mb-3">运营</div>
+                <div class="label">权限 flags</div>
+                <div class="code-box">admin:user:list,
+admin:user:update,
+admin:role:list</div>
+                <div class="mt-3"><button class="btn primary">保存角色</button> <button class="btn">清空</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card mt-5">
+        <div class="card-head"><strong>验证规则</strong></div>
+        <div class="card-body">
+          <table class="table">
+            <thead><tr><th>场景</th><th>预期</th></tr></thead>
+            <tbody>
+              <tr><td>没有 admin 权限</td><td>左侧不显示 Admin Users / Admin Roles</td></tr>
+              <tr><td>直接访问但后端返回 403</td><td>页面展示 Forbidden，不假设隐藏菜单就是安全边界</td></tr>
+              <tr><td>编辑 system 角色</td><td>表单禁用，后端也拒绝更新</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

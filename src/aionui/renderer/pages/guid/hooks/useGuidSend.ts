@@ -78,6 +78,15 @@ export type GuidSendResult = {
   isButtonDisabled: boolean;
 };
 
+export function isGuidConversationSubmitDisabled(input: {
+  loading: boolean;
+  input: string;
+  workspaceId?: string;
+  workspaceArchived?: boolean;
+}): boolean {
+  return input.loading || !input.input.trim() || !input.workspaceId || input.workspaceArchived === true;
+}
+
 /**
  * Hook that manages the send logic for all conversation types (openclaw/nanobot/acp).
  */
@@ -122,6 +131,10 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   const sendingRef = useRef(false);
 
   const handleSend = useCallback(async () => {
+    if (!workspaceId) {
+      throw new Error('请先创建或选择 Workspace');
+    }
+
     const isCustomWorkspace = !!dir;
     const finalWorkspace = dir || '';
 
@@ -423,6 +436,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     resolveEnabledSkills,
     resolveDisabledBuiltinSkills,
     guidDisabledBuiltinSkills,
+    guidEnabledSkills,
     availableMcpServers,
     selectedMcpServerIds,
     navigate,
@@ -466,7 +480,12 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   ]);
 
   // Calculate button disabled state
-  const isButtonDisabled = loading || !input.trim() || workspaceArchived === true;
+  const isButtonDisabled = isGuidConversationSubmitDisabled({
+    loading,
+    input,
+    workspaceId,
+    workspaceArchived,
+  });
 
   return {
     handleSend,

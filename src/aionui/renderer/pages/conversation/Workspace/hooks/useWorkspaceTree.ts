@@ -5,7 +5,9 @@
  */
 
 import { ipcBridge } from '@/common';
+import { absoluteToRelativePath, fromWorkspaceRuntimeEntries } from '@/common/adapter/workspaceMapper';
 import type { IDirOrFile } from '@/common/adapter/ipcBridge';
+import { workspaceRuntimeAdapter } from '@/common/resources/workspaceRuntime';
 import { runSingleFlight } from '@/renderer/pages/conversation/utils/singleFlight';
 import { emitter } from '@/renderer/utils/emitter';
 import { dispatchWorkspaceHasFilesEvent } from '@/renderer/utils/workspace/workspaceEvents';
@@ -17,6 +19,7 @@ const workspaceTreeInflight = new Map<string, Promise<IDirOrFile[]>>();
 
 interface UseWorkspaceTreeOptions {
   workspace: string;
+  workspaceId?: string;
   conversation_id: string;
   eventPrefix: 'acp' | 'codex' | 'aionrs';
 }
@@ -25,7 +28,7 @@ interface UseWorkspaceTreeOptions {
  * useWorkspaceTree - 合并树状态管理和选择逻辑
  * Merge tree state management and selection logic
  */
-export function useWorkspaceTree({ workspace, conversation_id, eventPrefix }: UseWorkspaceTreeOptions) {
+export function useWorkspaceTree({ workspace, workspaceId, conversation_id, eventPrefix }: UseWorkspaceTreeOptions) {
   // Tree state / 树状态
   const [files, setFiles] = useState<IDirOrFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,10 +78,15 @@ export function useWorkspaceTree({ workspace, conversation_id, eventPrefix }: Us
     (path: string, search?: string) => {
       const seq = ++loadSeqRef.current;
       setLoadingHandler(true);
-      const requestKey = `${conversation_id}:${workspace}:${path}:${search || ''}`;
-      return runSingleFlight(workspaceTreeInflight, requestKey, () =>
-        ipcBridge.conversation.getWorkspace.invoke({ path, workspace, conversation_id, search: search || '' })
-      )
+      const relPath = absoluteToRelativePath(path, workspace);
+      const requestKey = `${conversation_id}:${workspaceId || workspace}:${relPath}:${search || ''}`;
+      return runSingleFlight(workspaceTreeInflight, requestKey, async () => {
+        if (workspaceId) {
+          const result = await workspaceRuntimeAdapter.listFiles(workspaceId, relPath || '.', undefined);
+          return fromWorkspaceRuntimeEntries(result.items, workspace, relPath || '.');
+        }
+        return ipcBridge.conversation.getWorkspace.invoke({ path, workspace, conversation_id, search: search || '' });
+      })
         .then((res) => {
           // Ignore stale responses from aborted requests:
           // The backend aborts previous getWorkspace calls, returning [].
@@ -152,7 +160,7 @@ export function useWorkspaceTree({ workspace, conversation_id, eventPrefix }: Us
           setLoadingHandler(false);
         });
     },
-    [conversation_id, workspace, setLoadingHandler]
+    [conversation_id, workspace, workspaceId, setLoadingHandler]
   );
 
   /**
