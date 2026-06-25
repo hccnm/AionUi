@@ -12,6 +12,7 @@ import FeedbackButton from '@/renderer/components/base/FeedbackButton';
 import { iconColors } from '@/renderer/styles/colors';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { Alert, Button, Collapse, Form, InputNumber, Message, Modal, Switch, Tooltip } from '@arco-design/web-react';
+import useModal from '@arco-design/web-react/es/Modal/useModal';
 import { FolderSearch } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -31,7 +32,7 @@ const SystemModalContent: React.FC = () => {
   const { t } = useTranslation();
   const isDesktop = isElectronDesktop();
   const [form] = Form.useForm();
-  const [modal, modalContextHolder] = Modal.useModal();
+  const [modal, modalContextHolder] = useModal();
   const [error, setError] = useState<string | null>(null);
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';

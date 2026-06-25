@@ -22,9 +22,7 @@
       "@/*": ["src/aionui/*"],
       "@common/*": ["src/aionui/common/*"],
       "@renderer/*": ["src/aionui/renderer/*"],
-      "@web/*": ["src/*"],
-      "@office-ai/platform": ["../AionUi/node_modules/@office-ai/platform"],
-      "*": ["./node_modules/*", "../AionUi/node_modules/*"]
+      "@web/*": ["src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"]
